@@ -674,13 +674,13 @@ class Game{
         this.gameOver = false
         this.textElement = document.createElement('div');
         this.textElement.style.position = 'absolute';
-        this.textElement.style.width = '40%';
-        this.textElement.style.height = '20%';
+        this.textElement.style.width = '10%';
+        this.textElement.style.height = '5%';
         this.textElement.style.color = 'white';
         this.textElement.style.top = '10px'; // 调整这个值来设置顶部距离
         this.textElement.style.left = '50%';
         this.textElement.style.transform = 'translateX(-50%)'; // 水平居中
-        this.textElement.style.fontSize = '96px';
+        this.textElement.style.fontSize = '72px';
         this.textElement.style.textAlign = 'center'; // 水平居中文本
         this.textElement.style.lineHeight = '1.2'; // 垂直居中文本
         document.body.appendChild(this.textElement);
