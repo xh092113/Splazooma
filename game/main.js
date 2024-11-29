@@ -674,13 +674,13 @@ class Game{
         this.gameOver = false
         this.textElement = document.createElement('div');
         this.textElement.style.position = 'absolute';
-        this.textElement.style.width = '10%';
-        this.textElement.style.height = '5%';
+        this.textElement.style.width = '40%';
+        this.textElement.style.height = '20%';
         this.textElement.style.color = 'white';
-        this.textElement.style.top = '10px'; // 调整这个值来设置顶部距离
+        this.textElement.style.top = '1%'; // 调整这个值来设置顶部距离
         this.textElement.style.left = '50%';
         this.textElement.style.transform = 'translateX(-50%)'; // 水平居中
-        this.textElement.style.fontSize = '72px';
+        this.textElement.style.fontSize = '2vw';
         this.textElement.style.textAlign = 'center'; // 水平居中文本
         this.textElement.style.lineHeight = '1.2'; // 垂直居中文本
         document.body.appendChild(this.textElement);
@@ -695,7 +695,7 @@ class Game{
             playElement.style.top = '50%'; // 调整这个值来设置顶部距离
             playElement.style.left = `${i*50+25}%`;
             playElement.style.transform = 'translateX(-50%)'; // 水平居中
-            playElement.style.fontSize = '120px';
+            playElement.style.fontSize = '3vw';
             playElement.style.textAlign = 'center'; // 水平居中文本
             playElement.style.lineHeight = '1.2'; // 垂直居中文本
             document.body.appendChild(playElement);
