@@ -1,5 +1,4 @@
-
-// import * as THREE from 'three';
+import Grass from './grass'
 
 class UI{
     constructor(game){
@@ -624,17 +623,17 @@ class Game{
         this.scene.add(directionalLight)
         
         this.sceneSize = 80
-        const floorGeometry = new THREE.PlaneGeometry(this.sceneSize, this.sceneSize)
-        const floorMaterial = new THREE.MeshPhysicalMaterial({
-            color: 0xffffff,
-            side: THREE.DoubleSide,
-            metalness: 0, 
-            roughness: 0.1
-        })
-        const floorMesh = new THREE.Mesh(floorGeometry, floorMaterial)
-        this.scene.add(floorMesh)
-        floorMesh.rotation.x = Math.PI / 2
-        floorMesh.position.y = -1
+        // const floorGeometry = new THREE.PlaneGeometry(this.sceneSize, this.sceneSize)
+        // const floorMaterial = new THREE.MeshPhysicalMaterial({
+        //     color: 0xffffff,
+        //     side: THREE.DoubleSide,
+        //     metalness: 0, 
+        //     roughness: 0.1
+        // })
+        // const floorMesh = new THREE.Mesh(floorGeometry, floorMaterial)
+        // this.scene.add(floorMesh)
+        // floorMesh.rotation.x = Math.PI / 2
+        // floorMesh.position.y = -1
         
         const wallGeometry = new THREE.PlaneGeometry(this.sceneSize, 10)
         const wallMaterial = new THREE.MeshPhysicalMaterial({
@@ -657,6 +656,9 @@ class Game{
         const zRightWallMesh = new THREE.Mesh(wallGeometry, wallMaterial)
         zRightWallMesh.position.z = this.sceneSize/2
         this.scene.add(zRightWallMesh)
+
+        this.grass = new Grass(this.sceneSize, this.sceneSize * this.sceneSize * 50)
+        this.scene.add(this.grass)
         
         
         // Add key control
@@ -787,6 +789,9 @@ class Game{
     animate(){
         requestAnimationFrame(this.animate.bind(this))
         const deltaTime = this.clock.getDelta()
+
+        this.grass.update(this.clock.getElapsedTime())
+
         if (this.gameActivate){
             for (var i = 0; i < this.bullets.length; i++){
                 const bullet = this.bullets[i]
