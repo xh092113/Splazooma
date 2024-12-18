@@ -1,4 +1,4 @@
-import { vertexShader, fragmentShader } from './shaders'
+import { vertexShader, fragmentShader } from '/game/shaders'
 
 const BLADE_WIDTH = 0.1
 const BLADE_HEIGHT = 0.8

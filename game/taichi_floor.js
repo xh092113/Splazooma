@@ -1,5 +1,3 @@
-import { emissive } from "three/webgpu"
-
 const taichiFloorTexture = new THREE.TextureLoader().load('/game/assets/material/taichi_base.jpg')
 taichiFloorTexture.wrapS = taichiFloorTexture.wrapT = THREE.ClampToEdgeWrapping
 
