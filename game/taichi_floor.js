@@ -53,7 +53,7 @@ class TaichiFloor extends THREE.Mesh {
     }
 
     this.effectActives = [false, false]
-    this.effectPressed = [false, false]
+    this.effectPressed = [null, null]
     this.activeTimes = [0.0, 0.0]
 
     this.buttonCount1 = 0
@@ -64,7 +64,7 @@ class TaichiFloor extends THREE.Mesh {
     for (var i = 0; i < this.buttonEffects.length; i++){
       this.buttonCounts[i] = 0
       this.effectActives[i] = false
-      this.effectPressed[i] = false
+      this.effectPressed[i] = null
       this.buttonEffects[i].material.color.set(0x404000)
       this.buttonEffects[i].material.emissive.set(0x404000)
       this.buttonEffects[i].material.emissiveIntensity = 0.0
@@ -74,11 +74,11 @@ class TaichiFloor extends THREE.Mesh {
   update(deltaTime){
     // console.log(this.buttonCounts, this.effectActives, this.effectPressed)
     for (var i = 0; i < this.buttonEffects.length; i++){
-      if (this.effectActives[i] && !this.effectPressed[i]){
+      if (this.effectActives[i] && this.effectPressed[i] == null){
         this.activeTimes[i] += deltaTime
         this.buttonEffects[i].material.emissiveIntensity = Math.sin(this.activeTimes[i] * 10.0) * (MAX_ACTIVE_INTENSITY - MIN_ACTIVE_INTENSITY) / 2 + MIN_ACTIVE_INTENSITY
       }
-      else if (this.effectActives[i] && this.effectPressed[i]){
+      else if (this.effectActives[i] && this.effectPressed[i] != null){
         this.buttonEffects[i].material.emissiveIntensity = MAX_ACTIVE_INTENSITY
       }
       else{
@@ -97,16 +97,15 @@ class TaichiFloor extends THREE.Mesh {
     this.buttonCounts[id] += 1
   }
 
-  updatePress(id, state){
+  updatePress(id, state, pressId){
     if (this.effectActives[id]){
-      if (state && !this.effectPressed[id]){
-        this.effectPressed[id] = true
+      if (state && this.effectPressed[id] == null){
+        this.effectPressed[id] = pressId
         this.buttonEffects[id].material.color.set(0x008000)
         this.buttonEffects[id].material.emissive.set(0x008000)
         this.game.playAudio('/game/assets/sound/reverse_explosion.ogg')
       }
-      else if (!state && this.effectPressed[id]){
-        this.effectPressed[id] = false
+      else if (!state && this.effectPressed[id] != null){
         this.buttonEffects[id].material.color.set(0x404000)
         this.buttonEffects[id].material.emissive.set(0x404000)
         this.releaseSuperBullet(id)
@@ -118,6 +117,8 @@ class TaichiFloor extends THREE.Mesh {
     console.log("Super!")
     this.setCount(id, 0)
     this.game.playAudio('/game/assets/sound/cherrybomb.ogg')
+    this.game.createSuperBullet(this.buttonCenters[id].clone().add(new THREE.Vector3(0, 5, 0)), this.effectPressed[id])
+    this.effectPressed[id] = null
   }
 
 }
