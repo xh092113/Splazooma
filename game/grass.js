@@ -1,8 +1,8 @@
 import { vertexShader, fragmentShader } from './shaders'
 
 const BLADE_WIDTH = 0.1
-const BLADE_HEIGHT = 0.3
-const BLADE_HEIGHT_VARIATION = 0.2
+const BLADE_HEIGHT = 0.8
+const BLADE_HEIGHT_VARIATION = 0.6
 const BLADE_VERTEX_COUNT = 5
 const BLADE_TIP_OFFSET = 0.1
 
@@ -27,8 +27,12 @@ export class GrassGeometry extends THREE.BufferGeometry {
       // const x = radius * Math.cos(theta)
       // const y = radius * Math.sin(theta)
 
-      const x = (size) * Math.random() - (size/2)
-      const y = (size) * Math.random() - (size/2)
+      var x = (size) * Math.random() - (size/2)
+      var y = (size) * Math.random() - (size/2)
+      while (x**2 + y**2 < (size / 4)**2){
+        x = (size) * Math.random() - (size/2)
+        y = (size) * Math.random() - (size/2)
+      }
 
       uvs.push(
         ...Array.from({ length: BLADE_VERTEX_COUNT }).flatMap(() => [
@@ -92,7 +96,7 @@ export class GrassGeometry extends THREE.BufferGeometry {
   }
 }
 
-const cloudTexture = new THREE.TextureLoader().load('/Assets/material/cloud.jpg')
+const cloudTexture = new THREE.TextureLoader().load('/game/assets/material/cloud.jpg')
 cloudTexture.wrapS = cloudTexture.wrapT = THREE.RepeatWrapping
 
 class Grass extends THREE.Mesh {

@@ -1,4 +1,6 @@
+import { texture } from 'three/tsl'
 import Grass from './grass'
+import TaichiFloor from './taichi_floor'
 
 class UI{
     constructor(game){
@@ -152,7 +154,7 @@ class Snake{
                 }
             }
             const color = this.sphereColors[colorID]
-            const initOffset = new THREE.Vector3(-i*this.bodyRadius*(2-this.sphere_overlap_ratio), 0, 0)
+            const initOffset = new THREE.Vector3(-i*this.bodyRadius*(2-this.sphere_overlap_ratio), this.bodyRadius, 0)
             const sphere = createSphere(this.scene, this.bodyRadius, color, 1.0, initOffset.clone().add(initPosition))
             this.spheres.push(sphere)
             this.sphereColorIDs.push(colorID)
@@ -172,6 +174,9 @@ class Snake{
         this.turnLeftTime = -1.0
         this.turnRightTime = -1.0
         this.idleTime = -1.0
+
+        this.shootShakeMaxTime = 0.1
+        this.shootShakeTime = -1.0
     }
 
     getHeadQuat(){
@@ -311,6 +316,9 @@ class Snake{
             return
         }
         this.liveTime += deltaTime
+        if (this.shootShakeTime > 0){
+            this.shootShakeTime -= deltaTime
+        }
         const localForwardVector = new THREE.Vector3(1, 0, 0)
         if (!this.isAI){
             if (keyPressed[this.controlKeys[0]]){
@@ -401,7 +409,16 @@ class Snake{
     // Attach camera to sphere
     attachCameraToActor(){
         const actor = this.spheres[0]
-        const relativeCameraOffset = new THREE.Vector3(-8, 5, 0)
+        var relativeCameraOffset = new THREE.Vector3(-8, 5, 0)
+        if (this.shootShakeTime > 0.0){
+            const maxShakeDistance = 0.5
+            const shakeOffset = new THREE.Vector3(
+                maxShakeDistance * Math.random() * 2 - maxShakeDistance,
+                0.0,
+                maxShakeDistance * Math.random() * 2 - maxShakeDistance,
+            )
+            relativeCameraOffset = relativeCameraOffset.add(shakeOffset)
+        }
         const globalCameraPose = relativeCameraOffset.applyMatrix4(actor.matrixWorld)
         this.camera.position.set(globalCameraPose.x, globalCameraPose.y, globalCameraPose.z)
         this.camera.lookAt(actor.position)
@@ -441,6 +458,7 @@ class Snake{
             this.bulletColorID = Math.floor(Math.random() * this.sphereColors.length)
             this.bulletColor = this.sphereColors[this.bulletColorID]
             this.bulletCD = this.bulletMaxCD
+            this.shootShakeTime = this.shootShakeMaxTime
         }
     }
 
@@ -611,7 +629,7 @@ class Game{
         }
         
         // Add Light
-        const light = new THREE.AmbientLight(0x000040, 1)
+        const light = new THREE.AmbientLight(0x404040, 1)
         this.scene.add(light)
         
         // Add clock
@@ -623,38 +641,31 @@ class Game{
         this.scene.add(directionalLight)
         
         this.sceneSize = 80
-        // const floorGeometry = new THREE.PlaneGeometry(this.sceneSize, this.sceneSize)
-        // const floorMaterial = new THREE.MeshPhysicalMaterial({
-        //     color: 0xffffff,
-        //     side: THREE.DoubleSide,
-        //     metalness: 0, 
-        //     roughness: 0.1
-        // })
-        // const floorMesh = new THREE.Mesh(floorGeometry, floorMaterial)
-        // this.scene.add(floorMesh)
-        // floorMesh.rotation.x = Math.PI / 2
-        // floorMesh.position.y = -1
+
+        this.taichiFloor = new TaichiFloor(this.sceneSize / 8)
+        this.scene.add(this.taichiFloor)
         
         const wallGeometry = new THREE.PlaneGeometry(this.sceneSize, 10)
-        const wallMaterial = new THREE.MeshPhysicalMaterial({
-            color: 0xF5F5DC,
-            side: THREE.DoubleSide,
-            metalness: 0.0, 
-            roughness: 0.5
-        })
+        const wallTexture = new THREE.TextureLoader().load('/game/assets/material/wall.jpg')
+        wallTexture.wrapS = texture.wrapT = THREE.RepeatWrapping
+        wallTexture.repeat.set(10.0, 1.0)    
+        const wallMaterial = new THREE.MeshBasicMaterial({map: wallTexture})
+
         const xLeftWallMesh = new THREE.Mesh(wallGeometry, wallMaterial)
         xLeftWallMesh.position.x = -this.sceneSize/2
         xLeftWallMesh.rotation.y = Math.PI / 2
         this.scene.add(xLeftWallMesh)
         const xRightWallMesh = new THREE.Mesh(wallGeometry, wallMaterial)
         xRightWallMesh.position.x = this.sceneSize/2
-        xRightWallMesh.rotation.y = Math.PI / 2
+        xRightWallMesh.rotation.y = -Math.PI / 2
         this.scene.add(xRightWallMesh)
         const zLeftWallMesh = new THREE.Mesh(wallGeometry, wallMaterial)
         zLeftWallMesh.position.z = -this.sceneSize/2
+        zLeftWallMesh.rotation.y = 0.0
         this.scene.add(zLeftWallMesh)
         const zRightWallMesh = new THREE.Mesh(wallGeometry, wallMaterial)
         zRightWallMesh.position.z = this.sceneSize/2
+        zRightWallMesh.rotation.y = Math.PI
         this.scene.add(zRightWallMesh)
 
         this.grass = new Grass(this.sceneSize, this.sceneSize * this.sceneSize * 50)
@@ -703,6 +714,17 @@ class Game{
             document.body.appendChild(playElement);
             this.playElements.push(playElement)
         }
+
+        this.listener = new THREE.AudioListener()
+        const audio = new THREE.Audio(this.listener)
+        const audioLoader = new THREE.AudioLoader()
+        audioLoader.load('/game/assets/sound/bgm1.m4a', function(AudioBuffer) {
+            audio.setBuffer(AudioBuffer)
+            audio.setLoop(true)
+            audio.setVolume(0.5)
+            audio.play()
+        })
+
         this.gameActivate = false
         this.ui = new UI(this)
 
@@ -727,12 +749,10 @@ class Game{
         ]
         this.textElement.innerHTML = ""
         for (var i = 0; i < this.playerNum; i++){
-            const snake = new Snake(i, this, new THREE.Vector3(0, 0, i*30), controlKeys[i])
+            const snake = new Snake(i, this, new THREE.Vector3(0, 0, (2*i-1)*20), controlKeys[i])
             this.snakes.push(snake)
             this.playElements[i].innerHTML = ""
         }
-        // Add bullet buffer
-        this.bullets = []
         
         this.animate()
     }
@@ -791,6 +811,7 @@ class Game{
         const deltaTime = this.clock.getDelta()
 
         this.grass.update(this.clock.getElapsedTime())
+        this.taichiFloor.update(deltaTime)
 
         if (this.gameActivate){
             for (var i = 0; i < this.bullets.length; i++){
