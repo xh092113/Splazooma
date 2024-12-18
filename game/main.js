@@ -1,5 +1,5 @@
-import Grass from '/game/grass'
-import TaichiFloor from '/game/taichi_floor'
+import Grass from './grass'
+import TaichiFloor from './taichi_floor'
 
 class UI{
     constructor(game){
