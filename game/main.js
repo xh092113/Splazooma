@@ -1,4 +1,3 @@
-import { texture } from 'three/tsl'
 import Grass from '/game/grass'
 import TaichiFloor from '/game/taichi_floor'
 
@@ -647,7 +646,7 @@ class Game{
         
         const wallGeometry = new THREE.PlaneGeometry(this.sceneSize, 10)
         const wallTexture = new THREE.TextureLoader().load('/game/assets/material/wall.jpg')
-        wallTexture.wrapS = texture.wrapT = THREE.RepeatWrapping
+        wallTexture.wrapS = wallTexture.wrapT = THREE.RepeatWrapping
         wallTexture.repeat.set(10.0, 1.0)    
         const wallMaterial = new THREE.MeshBasicMaterial({map: wallTexture})
 
