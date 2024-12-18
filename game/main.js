@@ -54,7 +54,7 @@ class UI{
 }
 
 class Bullet {
-    constructor(scene, shooter, bulletRadius, bulletColor, bulletColorID, initBulletPosition, initBulletQuaternion, speed=40) {
+    constructor(scene, shooter, bulletRadius, bulletColor, bulletColorID, initBulletPosition, initBulletQuaternion, speed=80) {
       this.scene = scene
       this.shoorter = shooter
       this.radius = bulletRadius
@@ -119,7 +119,7 @@ class Bullet {
 
 
 class Snake{
-    constructor(playerId, game, initPosition, controlKeys, sphere_num = 8, sphere_radius = 1, sphere_speed = 8, sphere_rot_speed = 3, sphere_overlap_ratio = 0.2, isAI = false){
+    constructor(playerId, game, initPosition, controlKeys, sphere_num = 8, sphere_radius = 1, sphere_speed = 6, sphere_rot_speed = 3, sphere_overlap_ratio = 0.2, isAI = false){
         this.playerId = playerId
         this.game = game
         this.scene = game.scene
@@ -176,6 +176,9 @@ class Snake{
 
         this.shootShakeMaxTime = 0.1
         this.shootShakeTime = -1.0
+
+        this.mergeMaxCD = 1.0
+        this.mergeCD = this.mergeMaxCD
     }
 
     getHeadQuat(){
@@ -199,7 +202,7 @@ class Snake{
     }
 
     getSpeedFactor(){
-        return (Math.exp((1.0 - this.spheres.length) * Math.LN2 / 7.0) + 0.5) * (1 + this.liveTime / 60)
+        return (Math.exp((this.spheres.length - 1.0)* Math.log(0.8) / 7.0) + 0.2) * (1 + this.liveTime / 120)
     }
 
     AImove(deltaTime, snakes){
@@ -208,10 +211,12 @@ class Snake{
         var dieAngle = null
         var dieIndex = null
         var minDieDistance = null
+        var leftLiveCount = 0
+        var rightLiveCount = 0
         const dieDistances = [0]
         const originHeadQuat = new THREE.Quaternion(this.spheres[0].quaternion.x, this.spheres[0].quaternion.y, this.spheres[0].quaternion.z, this.spheres[0].quaternion.w)
         const originHeadPosition = getPosition(this.spheres[0])
-        for (var startAngle = -Math.PI / 6; startAngle < Math.PI / 6; startAngle += 0.1){
+        for (var startAngle = -Math.PI / 4; startAngle < Math.PI / 4; startAngle += 0.05){
             this.spheres[0].position.set(originHeadPosition.x, originHeadPosition.y, originHeadPosition.z)
             this.spheres[0].quaternion.set(originHeadQuat.x, originHeadQuat.y, originHeadQuat.z, originHeadQuat.w)
             this.spheres[0].rotateY(startAngle)
@@ -229,6 +234,14 @@ class Snake{
                     break
                 }
             }
+            if (cumDistance > maxDistance * 0.9){
+                if (startAngle < 0.0){
+                    leftLiveCount += 1
+                }
+                else{
+                    rightLiveCount += 1
+                }
+            }
             dieDistances.push(cumDistance)
         }
         dieDistances.push(0)
@@ -236,15 +249,31 @@ class Snake{
         this.spheres[0].position.set(originHeadPosition.x, originHeadPosition.y, originHeadPosition.z)
         this.spheres[0].quaternion.set(originHeadQuat.x, originHeadQuat.y, originHeadQuat.z, originHeadQuat.w)
         if (dieIndex != null){
-            if (dieDistances[dieIndex-1] > dieDistances[dieIndex+1]){
-                this.turnLeftTime = -1.0
-                this.turnRightTime = 0.5
-                this.idleTime = -1.0
+            var minLeftDistance = dieDistances[dieIndex-1]
+            // if (minLeftDistance > dieDistances[dieIndex+1]){
+            if (this.turnLeftTime < 0.0 && this.turnRightTime < 0.0){
+                if (leftLiveCount > rightLiveCount){
+                    this.turnLeftTime = -1.0
+                    this.turnRightTime = 0.5
+                    this.idleTime = -1.0
+                }
+                else{
+                    this.turnLeftTime = 0.5
+                    this.turnRightTime = -1.0
+                    this.idleTime = -1.0
+                }
             }
-            else{
-                this.turnLeftTime = 0.5
-                this.turnRightTime = -1.0
-                this.idleTime = -1.0
+            else {
+                if (leftLiveCount > rightLiveCount + 1){
+                    this.turnLeftTime = -1.0
+                    this.turnRightTime = 0.5
+                    this.idleTime = -1.0
+                }
+                else if (rightLiveCount > leftLiveCount + 1){
+                    this.turnLeftTime = 0.5
+                    this.turnRightTime = -1.0
+                    this.idleTime = -1.0
+                }
             }
         }
         else{
@@ -268,14 +297,23 @@ class Snake{
                             }
                         }
                     }
+                    // if (this.playerId == 0){
+                    //     console.log(leftSnakeCount, rightSnakeCount)
+                    // }
                     if (leftSnakeCount > rightSnakeCount){
-                        this.turnLeftTime = 0.3
+                        // if (this.playerId == 0){
+                        //     console.log("left")
+                        // }
+                        this.turnLeftTime = 0.5
                         this.turnRightTime = -1.0
                         this.idleTime = -1.0
                     }
-                    else{
+                    else if (leftSnakeCount < rightSnakeCount){
+                        // if (this.playerId == 0){
+                        //     console.log("right")
+                        // }
                         this.turnLeftTime = -1.0
-                        this.turnRightTime = 0.3
+                        this.turnRightTime = 0.5
                         this.idleTime = -1.0
                     }
                 }
@@ -297,13 +335,28 @@ class Snake{
         }
 
     }
-    AIshoot(targetSphereIndex, sceneSpheres, sceneSphereColorIds, bullets){
+    AIshoot(targetSphereIndex, sceneSpheres, sceneSphereColorIds, bullets, snakes){
         if (targetSphereIndex != null){
-            console.log(sceneSphereColorIds[targetSphereIndex], this.bulletColorID, targetSphereIndex > this.spheres.length-2)
             if (sceneSphereColorIds[targetSphereIndex] == this.bulletColorID && targetSphereIndex > this.spheres.length-2){
                 this.shoot(bullets)
             }
             else if (sceneSphereColorIds[targetSphereIndex] != this.bulletColorID && targetSphereIndex <= this.spheres.length-2){
+                this.shoot(bullets)
+            }
+        }
+        else{
+            var leftSnakeCount = 0
+            var rightSnakeCount = 0
+            for (var i = 0; i < snakes.length; i++){
+                if (i != this.playerId){
+                    for (var j = 0; j < snakes[i].spheres.length; j++){
+                        if (snakes[i].sphereColorIDs[j] == this.bulletColorID){
+                            rightSnakeCount++
+                        }
+                    }
+                }
+            }
+            if (rightSnakeCount + leftSnakeCount == 0){
                 this.shoot(bullets)
             }
         }
@@ -352,7 +405,7 @@ class Snake{
         // Update player camera
         this.attachCameraToActor()
 
-        this.processMerge()
+        this.processMerge(deltaTime)
 
         // Update hint ball
         const sceneSpheres = this.spheres.slice(1)
@@ -367,7 +420,7 @@ class Snake{
         }
         const targetSphereIndex = this.updateHintBall(this.hintBall, this.spheres[0], sceneSpheres, this.bodyRadius, this.bulletColor, this.bulletCD < 0)
         if (this.isAI){
-            this.AIshoot(targetSphereIndex, sceneSpheres, sceneSphereColorIds, bullets)
+            this.AIshoot(targetSphereIndex, sceneSpheres, sceneSphereColorIds, bullets, snakes)
         }
     }
 
@@ -410,7 +463,7 @@ class Snake{
         const actor = this.spheres[0]
         var relativeCameraOffset = new THREE.Vector3(-8, 5, 0)
         if (this.shootShakeTime > 0.0){
-            const maxShakeDistance = 0.5
+            const maxShakeDistance = 0.3
             const shakeOffset = new THREE.Vector3(
                 maxShakeDistance * Math.random() * 2 - maxShakeDistance,
                 0.0,
@@ -458,6 +511,8 @@ class Snake{
             this.bulletColor = this.sphereColors[this.bulletColorID]
             this.bulletCD = this.bulletMaxCD
             this.shootShakeTime = this.shootShakeMaxTime
+
+            this.game.playAudio('/game/assets/sound/throw.ogg', false, 1.0)
         }
     }
 
@@ -471,6 +526,7 @@ class Snake{
                 colorID += 1
             }
             this.appendBody(this.spheres.length, colorID)
+            this.game.taichiFloor.updateCount(this.playerId)
         }
     }
 
@@ -503,30 +559,48 @@ class Snake{
         this.processingBody = false
     }
 
-    processMerge(){
+    processMerge(deltaTime){
         while(this.processingBody){
             console.log("Waiting Merge")
         }
         this.processingBody = true
+
+        this.mergeCD -= deltaTime
         this.mergeCount = 0
         var mergeUpdate = false
         var lastUpdateIndex = 0
+        var hasMerged = false
         do{
             mergeUpdate = false
-            for (var i = Math.max(lastUpdateIndex-2, 0); i < this.spheres.length-2; i++){
+            for (var i = Math.max(lastUpdateIndex, 0); i < this.spheres.length-2; i++){
                 if (this.sphereColorIDs[i] == this.sphereColorIDs[i+1] && this.sphereColorIDs[i+1] == this.sphereColorIDs[i+2]){
                     var j = i+3
                     while (j < this.spheres.length && this.sphereColorIDs[j] == this.sphereColorIDs[i])
                         j++
-                    this.mergeBody(i, j)
-                    this.mergeCount += j-i-2
-                    mergeUpdate = true
-                    lastUpdateIndex = i
-                    break
+                    for (var k = i; k < j; k++){
+                        this.spheres[k].material.color.set(0x9370DB)
+                        this.spheres[k].material.transparent = true
+                        this.spheres[k].material.opacity = 0.9
+                        this.spheres[k].material.metalness = 0.8
+                        this.spheres[k].material.metalness = 0.0
+                    }
+                    if (this.mergeCD < 0.0){
+                        hasMerged = true
+                        this.mergeBody(i, j)
+                        this.mergeCount += j-i-2
+                        mergeUpdate = true
+                        lastUpdateIndex = i
+                        this.game.playAudio('/game/assets/sound/points.ogg')
+                        break
+                    }
                 }
             }
+            
         }
         while(mergeUpdate)
+        if (this.mergeCD < 0.0){
+            this.mergeCD = this.mergeMaxCD
+        }
         this.processingBody = false
     }
 
@@ -641,7 +715,7 @@ class Game{
         
         this.sceneSize = 80
 
-        this.taichiFloor = new TaichiFloor(this.sceneSize / 8)
+        this.taichiFloor = new TaichiFloor(this, this.sceneSize / 8)
         this.scene.add(this.taichiFloor)
         
         const wallGeometry = new THREE.PlaneGeometry(this.sceneSize, 10)
@@ -715,14 +789,12 @@ class Game{
         }
 
         this.listener = new THREE.AudioListener()
-        const audio = new THREE.Audio(this.listener)
-        const audioLoader = new THREE.AudioLoader()
-        audioLoader.load('/game/assets/sound/bgm1.m4a', function(AudioBuffer) {
-            audio.setBuffer(AudioBuffer)
-            audio.setLoop(true)
-            audio.setVolume(0.5)
-            audio.play()
-        })
+        this.bgmMaxVolume = 0.5
+        this.bgmFile = '/game/assets/sound/bgm_Main.m4a'
+        this.bgmAudio = this.playAudio(this.bgmFile, true, this.bgmMaxVolume)
+        this.bgmChangeStage = "Play"
+        this.bgmChangeTime = 1.0
+        this.bgmVolume = this.bgmMaxVolume
 
         this.gameActivate = false
         this.ui = new UI(this)
@@ -739,9 +811,11 @@ class Game{
         for (var i = 0; i < this.bullets.length; i++){
             this.bullets[i].destroy()
         }
+        this.taichiFloor.reset()
 
         // Add players
         this.snakes = []
+        this.bullets = []
         const controlKeys = [
             ["keya", "keyd", "keyw", "keys"],
             ["arrowleft", "arrowright", "arrowup", "arrawdown"]
@@ -765,7 +839,9 @@ class Game{
             if (!this.playerStats[i]){
                 this.snakes[i].isAI = true
             }
+            // this.snakes[i].isAI = true
         }
+        this.startUpdateBgm("Play")
     }
     
     updateEndState(dieStats){
@@ -803,6 +879,7 @@ class Game{
                 }
             }
         }
+        this.startUpdateBgm("Main")
     }
     
     animate(){
@@ -849,6 +926,17 @@ class Game{
                     }
                 }
             }
+            for (var k = 0; k < this.taichiFloor.buttonNum; k++){
+                var isPressed = false
+                for (var i = 0; i < this.playerNum; i++){
+                    for (var j = 0; j < this.snakes[i].spheres.length; j++){
+                        if (detectCircleCollision(this.snakes[i].spheres[j].position, this.taichiFloor.buttonCenters[k], this.taichiFloor.buttonRaidus)){
+                            isPressed = true
+                        }
+                    }
+                }
+                this.taichiFloor.updatePress(k, isPressed)
+            }
         
             this.textElement.innerHTML = ""
             const dieStats = []
@@ -878,6 +966,8 @@ class Game{
             this.renderer.setViewport(window.innerWidth * i / this.playerNum, 0, window.innerWidth / this.playerNum, window.innerHeight)
             this.renderer.render(this.scene, this.cameras[i])
         }
+
+        this.updateBgm(deltaTime)
     }
     
 
@@ -902,6 +992,43 @@ class Game{
         isDie |= this.snakes[i].detectWallCollision(1, this.sceneSize/2)
         return isDie
     }
+
+    startUpdateBgm(stage){
+        this.bgmFile = "/game/assets/sound/bgm_" + stage + ".m4a"
+        this.bgmChangeStage = "Out"
+    }
+
+    updateBgm(deltaTime){
+        if (this.bgmChangeStage == "Out"){
+            this.bgmVolume = Math.max(this.bgmVolume - this.bgmMaxVolume / this.bgmChangeTime * deltaTime, 0.0)
+            if (this.bgmVolume < 0.01){
+                this.bgmChangeStage = "In"
+                // this.bgmAudio.stop()
+                this.bgmAudio = this.playAudio(this.bgmFile, true, 0.0)
+            }
+        }
+
+        if (this.bgmChangeStage == "In"){
+            this.bgmVolume = Math.min(this.bgmVolume + this.bgmMaxVolume / this.bgmChangeTime * deltaTime, this.bgmMaxVolume)
+            if (this.bgmVolume > this.bgmMaxVolume - 0.01){
+                this.bgmChangeStage = "Play"
+            }
+        }
+        this.bgmAudio.setVolume(this.bgmVolume)
+    }
+
+    playAudio(audioFile, loop=false, volume=0.5){
+        const audio = new THREE.Audio(this.listener)
+        const audioLoader = new THREE.AudioLoader()
+        audioLoader.load(audioFile, function(AudioBuffer) {
+            audio.setBuffer(AudioBuffer)
+            audio.setLoop(loop)
+            audio.setVolume(volume)
+            audio.play()
+        })
+        return audio
+    }
+
 }
 
 function getPosition(mesh){
@@ -975,6 +1102,10 @@ function getSpheresCollDistance(origin, direction, center, collDisThreshold){
 }
 
 // Collision
+function detectCircleCollision(position, centerPosition, radius){
+    const positionOffset = new THREE.Vector3(position.x-centerPosition.x, position.z-centerPosition.z, 0.0)
+    return positionOffset.length() < radius
+}
 function detectSphereCollision(sphere1, sphereRadius1, sphere2, sphereRadius2){
     const positionOffset = new THREE.Vector3(sphere1.position.x-sphere2.position.x, sphere1.position.y-sphere2.position.y, sphere1.position.z-sphere2.position.z)
     return positionOffset.length() < (sphereRadius1 + sphereRadius2)
