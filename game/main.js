@@ -358,7 +358,7 @@ class Snake{
         const originHeadPosition = getPosition(this.spheres[0])
         
         var maxDistance = 1.0 * this.sphere_speed * this.getSpeedFactor()
-        for (var startAngle = -Math.PI / 4; startAngle < Math.PI / 4; startAngle += 0.05){
+        for (var startAngle = -Math.PI / 3; startAngle < Math.PI / 3; startAngle += 0.05){
             this.spheres[0].position.set(originHeadPosition.x, originHeadPosition.y, originHeadPosition.z)
             this.spheres[0].quaternion.set(originHeadQuat.x, originHeadQuat.y, originHeadQuat.z, originHeadQuat.w)
             this.spheres[0].rotateY(startAngle)
@@ -367,10 +367,12 @@ class Snake{
                 cumDistance += deltaDistance
                 this.spheres[0].translateOnAxis(localForwardVector, deltaDistance)
                 if (game.detectSnakeDeath(this.playerId)){
-                    if (minDieDistance == null || minDieDistance > cumDistance){
-                        minDieDistance = cumDistance
-                        dieAngle = startAngle
-                        dieIndex = dieDistances.length
+                    if (Math.abs(startAngle) < Math.PI / 6){
+                        if (minDieDistance == null || minDieDistance > cumDistance){
+                            minDieDistance = cumDistance
+                            dieAngle = startAngle
+                            dieIndex = dieDistances.length
+                        }
                     }
                     break
                 }
@@ -417,12 +419,12 @@ class Snake{
             }
             else {
                 // console.log(leftLiveCount, rightLiveCount, this.turnLeftTime, this.turnRightTime)
-                if (leftLiveCount > rightLiveCount + 2){
+                if (leftLiveCount > rightLiveCount * 1.2){
                     this.turnLeftTime = -1.0
                     this.turnRightTime = 0.5
                     this.idleTime = -1.0
                 }
-                else if (rightLiveCount > leftLiveCount + 2){
+                else if (rightLiveCount > leftLiveCount * 1.2){
                     this.turnLeftTime = 0.5
                     this.turnRightTime = -1.0
                     this.idleTime = -1.0
@@ -914,6 +916,7 @@ class Game{
             "swing.ogg",
             "throw.ogg",
             "sfx_wind.wav",
+            "bell.wav",
         ];
         const loadAudioPromises = audioFiles.map(filename => this.loadAudioAssets(filename))
 
@@ -1094,7 +1097,7 @@ class Game{
             this.playElements.push(playElement)
         }
 
-        this.bgmMaxVolume = 0.5
+        this.bgmMaxVolume = 0.1
         this.bgmFile = 'bgm_Main.m4a'
         this.bgmAudio = this.playAudio(this.bgmFile, true, this.bgmMaxVolume)
         this.bgmChangeStage = "Play"
@@ -1150,7 +1153,7 @@ class Game{
             if (!this.playerStats[i]){
                 this.snakes[i].isAI = true
             }
-            this.snakes[i].isAI = true
+            // this.snakes[i].isAI = true   
         }
         this.startUpdateBgm("Play")
     }
@@ -1349,6 +1352,12 @@ class Game{
     }
 
     updateBgm(deltaTime){
+        if (this.bgmFile == "bgm_Main.m4a"){
+            this.bgmMaxVolume = 0.1
+        }
+        else{
+            this.bgmMaxVolume = 0.5
+        }
         if (this.bgmChangeStage == "Out"){
             this.bgmVolume = Math.max(this.bgmVolume - this.bgmMaxVolume / this.bgmChangeTime * deltaTime, 0.0)
             if (this.bgmVolume < 0.01){
@@ -1370,6 +1379,9 @@ class Game{
     playAudio(audioFile, loop=false, volume=0.5){
         const audio = this.audioAssets[audioFile]
         audio.setLoop(loop)
+        if (audioFile == "bgm_Main.m4a"){
+            volume = 0.1
+        }
         audio.setVolume(volume)
         audio.play()
         // const audioLoader = new THREE.AudioLoader()

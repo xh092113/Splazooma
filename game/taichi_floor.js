@@ -1,6 +1,6 @@
 import { GLTFLoader } from "https://threejsfundamentals.org/threejs/resources/threejs/r132/examples/jsm/loaders/GLTFLoader.js";
 
-const MIN_ACTIVE_INTENSITY = 0.0
+const MIN_ACTIVE_INTENSITY = 2.0
 const MAX_ACTIVE_INTENSITY = 5.0
 
 class HintBird {
@@ -140,9 +140,9 @@ class TaichiFloor extends THREE.Mesh {
     this.rotateMaxSpeed = 0.3
     this.rotateSpeed = 0.0
 
-    const buttonEffectGeometry = new THREE.CylinderGeometry(radius / 8.0, radius / 8.0, 0.2, 32, 1)
+    this.buttonRaidus = radius / 4
+    const buttonEffectGeometry = new THREE.CylinderGeometry(this.buttonRaidus, this.buttonRaidus, 0.2, 32, 1)
     buttonEffectGeometry.rotateX(Math.PI / 2)
-    this.buttonRaidus = radius / 8.0
     this.buttonNum = 2
     this.buttonPositionY = [-radius, radius]
     this.buttons = []
@@ -168,7 +168,7 @@ class TaichiFloor extends THREE.Mesh {
           })
       )
       button.position.y = this.buttonPositionY[i]
-      button.position.z = 0.01
+      button.position.z = -0.01
       const buttonEffect = new THREE.Mesh(buttonEffectGeometry, buttonEffectMaterial)
       button.add(buttonEffect)
       this.add(button)
@@ -228,13 +228,16 @@ class TaichiFloor extends THREE.Mesh {
     for (var i = 0; i < this.buttonEffects.length; i++){
       if (this.effectActives[i] && this.effectPressed[i] == null){
         this.activeTimes[i] += deltaTime
+        this.buttonEffects[i].position.z = 0.01
         this.buttonEffects[i].material.emissiveIntensity = Math.sin(this.activeTimes[i] * 10.0) * (MAX_ACTIVE_INTENSITY - MIN_ACTIVE_INTENSITY) / 2 + MIN_ACTIVE_INTENSITY
       }
       else if (this.effectActives[i] && this.effectPressed[i] != null){
         this.buttonEffects[i].material.emissiveIntensity = MAX_ACTIVE_INTENSITY
+        this.buttonEffects[i].position.z = 0.01
       }
       else{
         this.buttonEffects[i].material.emissiveIntensity = 0.0
+        this.buttonEffects[i].position.z = -10.0
       }
     }
   }
@@ -244,7 +247,11 @@ class TaichiFloor extends THREE.Mesh {
   }
 
   setCount(id, cnt){
+    console.log("update", id, cnt)
     this.buttonCounts[id] = Math.min(cnt, this.maxSuperCount)
+    if (!this.effectActives[id] && this.buttonCounts[id] >= this.maxSuperCount){
+      this.game.playAudio("bell.wav")
+    }
     this.effectActives[id] = (this.buttonCounts[id] >= this.maxSuperCount)
     for (var j = 0; j < this.maxSuperCount; j++){
       this.hintBirds[id][j].setActivate(j < cnt)
@@ -253,7 +260,6 @@ class TaichiFloor extends THREE.Mesh {
 
   updateCount(id){
     this.setCount(id, this.buttonCounts[id] + 1)
-    this.buttonCounts[id] += 1
   }
 
   updatePress(id, state, pressId){
