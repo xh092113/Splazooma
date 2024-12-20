@@ -193,7 +193,7 @@ class SuperBullet {
             colors[i] = (colors[i] + 1) % 2
         }
         const target = this.targetSnake.spheres[targetId]
-        this.targetPosition = new THREE.Vector3(target.position.x, target.position.y * 2.8, target.position.z)
+        this.targetPosition = new THREE.Vector3(target.position.x, target.position.y * 2.9, target.position.z)
     }
   
     fly(deltaTime){
@@ -338,11 +338,11 @@ class Snake{
 
     getSpeedFactor(){
         var speedupFactor = (Math.exp((this.spheres.length - 1.0)* Math.log(0.8) / 7.0) + 0.2)
-        speedupFactor *= (1 + this.liveTime / 120)
+        speedupFactor *= (1 + this.liveTime / 240)
         if (this.speedup){
             speedupFactor *= 1.5
         }
-        return speedupFactor
+        return speedupFactor * 0.8
     }
 
     AImove(deltaTime, snakes){
@@ -356,12 +356,13 @@ class Snake{
         const dieDistances = [0]
         const originHeadQuat = new THREE.Quaternion(this.spheres[0].quaternion.x, this.spheres[0].quaternion.y, this.spheres[0].quaternion.z, this.spheres[0].quaternion.w)
         const originHeadPosition = getPosition(this.spheres[0])
+        
+        var maxDistance = 1.0 * this.sphere_speed * this.getSpeedFactor()
         for (var startAngle = -Math.PI / 4; startAngle < Math.PI / 4; startAngle += 0.05){
             this.spheres[0].position.set(originHeadPosition.x, originHeadPosition.y, originHeadPosition.z)
             this.spheres[0].quaternion.set(originHeadQuat.x, originHeadQuat.y, originHeadQuat.z, originHeadQuat.w)
             this.spheres[0].rotateY(startAngle)
             var cumDistance = 0
-            var maxDistance = 1.0 * this.sphere_speed
             while (cumDistance + deltaDistance < maxDistance){
                 cumDistance += deltaDistance
                 this.spheres[0].translateOnAxis(localForwardVector, deltaDistance)
@@ -374,14 +375,14 @@ class Snake{
                     break
                 }
             }
-            if (cumDistance > maxDistance * 0.9){
-                if (startAngle < 0.0){
-                    leftLiveCount += 1
-                }
-                else{
-                    rightLiveCount += 1
-                }
-            }
+            // if (cumDistance > maxDistance * 0.9){
+            //     if (startAngle < 0.0){
+            //         leftLiveCount += 1
+            //     }
+            //     else{
+            //         rightLiveCount += 1
+            //     }
+            // }
             dieDistances.push(cumDistance)
         }
         dieDistances.push(0)
@@ -392,7 +393,7 @@ class Snake{
             this.speedup = false
 
             for (var i = 0; i < dieDistances.length; i++){
-                if (dieDistances[i] > dieDistances[dieIndex] * 1.2){
+                if (dieDistances[i] > dieDistances[dieIndex] * 1.2 || dieDistances[i] > maxDistance - deltaDistance){
                     if (i*2 < dieDistances.length){
                         leftLiveCount += 1
                     }
@@ -415,6 +416,7 @@ class Snake{
                 }
             }
             else {
+                // console.log(leftLiveCount, rightLiveCount, this.turnLeftTime, this.turnRightTime)
                 if (leftLiveCount > rightLiveCount + 2){
                     this.turnLeftTime = -1.0
                     this.turnRightTime = 0.5
@@ -910,7 +912,8 @@ class Game{
             "points.ogg",
             "reverse_explosion.ogg",
             "swing.ogg",
-            "throw.ogg"
+            "throw.ogg",
+            "sfx_wind.wav",
         ];
         const loadAudioPromises = audioFiles.map(filename => this.loadAudioAssets(filename))
 
@@ -1147,7 +1150,7 @@ class Game{
             if (!this.playerStats[i]){
                 this.snakes[i].isAI = true
             }
-            // this.snakes[i].isAI = true
+            this.snakes[i].isAI = true
         }
         this.startUpdateBgm("Play")
     }
@@ -1187,6 +1190,7 @@ class Game{
                 }
             }
         }
+        this.audioAssets['sfx_wind.wav'].stop()
         this.playAudio("bgm_End.m4a")
         this.startUpdateBgm("Main")
     }
@@ -1301,10 +1305,15 @@ class Game{
         }
 
         if (!this.gameOver && this.gameTime > 20.0 && this.bgmFile != "bgm_Fight.m4a"){
-            this.startUpdateBgm("Fight")
-            this.taichiFloor.startRotate = true
+            this.startFight()
         }
         this.updateBgm(deltaTime)
+    }
+
+    startFight(){
+        this.startUpdateBgm("Fight")
+        this.taichiFloor.startRotate = true
+        this.playAudio("sfx_wind.wav")
     }
     
     createSuperBullet(position, shooterId){
@@ -1344,7 +1353,7 @@ class Game{
             this.bgmVolume = Math.max(this.bgmVolume - this.bgmMaxVolume / this.bgmChangeTime * deltaTime, 0.0)
             if (this.bgmVolume < 0.01){
                 this.bgmChangeStage = "In"
-                // this.bgmAudio.stop()
+                this.bgmAudio.stop()
                 this.bgmAudio = this.playAudio(this.bgmFile, true, 0.0)
             }
         }
