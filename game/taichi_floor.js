@@ -1,7 +1,5 @@
 import { GLTFLoader } from "https://threejsfundamentals.org/threejs/resources/threejs/r132/examples/jsm/loaders/GLTFLoader.js";
 
-const taichiFloorTexture = new THREE.TextureLoader().load('/game/assets/material/taichi_base.jpg')
-taichiFloorTexture.wrapS = taichiFloorTexture.wrapT = THREE.ClampToEdgeWrapping
 
 const MIN_ACTIVE_INTENSITY = 0.0
 const MAX_ACTIVE_INTENSITY = 5.0
@@ -105,7 +103,9 @@ class HintBird {
 }
 
 class TaichiFloor extends THREE.Mesh {
-  constructor(game, radius) {
+  constructor(game, texture, radius) {
+    const taichiFloorTexture = texture
+    taichiFloorTexture.wrapS = taichiFloorTexture.wrapT = THREE.ClampToEdgeWrapping
     const floorGeometry = new THREE.CircleGeometry(radius*2, 32)
     const floorMaterial = new THREE.MeshBasicMaterial({map: taichiFloorTexture})
     super(floorGeometry, floorMaterial)

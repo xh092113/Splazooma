@@ -704,7 +704,7 @@ class Snake{
             this.bulletCD = this.bulletMaxCD
             this.shootShakeTime = this.shootShakeMaxTime
 
-            this.game.playAudio('/game/assets/sound/throw.ogg', false, 1.0)
+            this.game.playAudio('throw.ogg', false, 1.0)
         }
     }
 
@@ -792,7 +792,7 @@ class Snake{
                         this.mergeCount += j-i-2
                         mergeUpdate = true
                         lastUpdateIndex = i
-                        this.game.playAudio('/game/assets/sound/points.ogg')
+                        this.game.playAudio('points.ogg')
                         break
                     }
                 }
@@ -886,8 +886,73 @@ class Snake{
 
 class Game{
     constructor(){
-        this.initGame()
-        this.setGame()
+        this.loadAssets().then(() => {
+            console.log("Start")
+            this.initGame()
+            this.setGame()
+        })
+    }
+
+    loadAssets(){
+        this.assetsPath = "/game/assets/"
+
+        this.audioAssets = {}
+        this.audioLoader = new THREE.AudioLoader()
+        this.listener = new THREE.AudioListener()
+        const audioFiles = [
+            "bgm_End.m4a",
+            "bgm_Fight.m4a",
+            "bgm_Main.m4a",
+            "bgm_Play.m4a",
+            "cherrybomb.ogg",
+            "points.ogg",
+            "reverse_explosion.ogg",
+            "swing.ogg",
+            "throw.ogg"
+        ];
+        const loadAudioPromises = audioFiles.map(filename => this.loadAudioAssets(filename))
+
+        this.textureLoader = new THREE.TextureLoader()
+        this.textureAssets = {}
+        const textureFiles = [
+            "cloud.jpg",
+            "explosure.png",
+            "taichi_base.jpg",
+            "wall.jpg",
+        ];
+        const loadTexturePromises = textureFiles.map(filename => this.loadTextureAssets(filename))
+    
+        const loadPromises = loadAudioPromises.concat(loadTexturePromises)
+        return Promise.all(loadPromises);
+    }
+
+    loadAudioAssets(filename){
+        this.assetsTotalNum += 1
+        const game = this
+        const audio = new THREE.Audio(this.listener)
+        return new Promise((resolve, reject) => {
+            this.audioLoader.load(this.assetsPath + "sound/" + filename, function(AudioBuffer) {
+                audio.setBuffer(AudioBuffer)
+                game.audioAssets[filename] = audio
+                game.assetsReadyNum += 1
+                resolve()
+            }, 
+            function (xhr) {
+                console.log((xhr.loaded / xhr.total) * 100 + '% loaded');
+            },
+            function (err) {
+                console.error('An error happened while loading the audio', err);
+                reject(err)
+            })
+        })
+    }
+
+    loadTextureAssets(filename){
+        return new Promise((resolve, reject) => {
+            const texture = this.textureLoader.load('/game/assets/material/' + filename)
+            this.textureAssets[filename] = texture
+            resolve()
+        })
     }
 
     initGame(){
@@ -928,12 +993,12 @@ class Game{
         
         this.sceneSize = 80
 
-        this.taichiFloor = new TaichiFloor(this, this.sceneSize / 8)
+        this.taichiFloor = new TaichiFloor(this, this.textureAssets['taichi_base.jpg'], this.sceneSize / 8)
         this.scene.add(this.taichiFloor)
         
         const wallWidth = 2
         const wallGeometry = new THREE.BoxGeometry(this.sceneSize, 20, wallWidth)
-        const wallTexture = new THREE.TextureLoader().load('/game/assets/material/wall.jpg')
+        const wallTexture = this.textureAssets['wall.jpg']
         wallTexture.wrapS = wallTexture.wrapT = THREE.RepeatWrapping
         wallTexture.repeat.set(10.0, 1.0)    
         const wallMaterial = new THREE.MeshBasicMaterial({map: wallTexture})
@@ -955,7 +1020,7 @@ class Game{
         zRightWallMesh.rotation.y = Math.PI
         this.scene.add(zRightWallMesh)
 
-        this.grass = new Grass(this.sceneSize, this.sceneSize * this.sceneSize * 50, this.sceneSize / 8)
+        this.grass = new Grass(this.textureAssets["cloud.jpg"], this.sceneSize, this.sceneSize * this.sceneSize * 50, this.sceneSize / 8)
         this.scene.add(this.grass)
         
         
@@ -1002,9 +1067,8 @@ class Game{
             this.playElements.push(playElement)
         }
 
-        this.listener = new THREE.AudioListener()
         this.bgmMaxVolume = 0.5
-        this.bgmFile = '/game/assets/sound/bgm_Main.m4a'
+        this.bgmFile = 'bgm_Main.m4a'
         this.bgmAudio = this.playAudio(this.bgmFile, true, this.bgmMaxVolume)
         this.bgmChangeStage = "Play"
         this.bgmChangeTime = 1.0
@@ -1099,7 +1163,7 @@ class Game{
                 }
             }
         }
-        this.playAudio("/game/assets/sound/bgm_End.m4a")
+        this.playAudio("bgm_End.m4a")
         this.startUpdateBgm("Main")
     }
     
@@ -1212,7 +1276,7 @@ class Game{
             this.renderer.render(this.scene, this.cameras[i])
         }
 
-        if (!this.gameOver && this.gameTime > 20.0 && this.bgmFile != "/game/assets/sound/bgm_Fight.m4a"){
+        if (!this.gameOver && this.gameTime > 20.0 && this.bgmFile != "bgm_Fight.m4a"){
             this.startUpdateBgm("Fight")
             this.taichiFloor.startRotate = true
         }
@@ -1247,7 +1311,7 @@ class Game{
     }
 
     startUpdateBgm(stage){
-        this.bgmFile = "/game/assets/sound/bgm_" + stage + ".m4a"
+        this.bgmFile = "bgm_" + stage + ".m4a"
         this.bgmChangeStage = "Out"
     }
 
@@ -1271,14 +1335,17 @@ class Game{
     }
 
     playAudio(audioFile, loop=false, volume=0.5){
-        const audio = new THREE.Audio(this.listener)
-        const audioLoader = new THREE.AudioLoader()
-        audioLoader.load(audioFile, function(AudioBuffer) {
-            audio.setBuffer(AudioBuffer)
-            audio.setLoop(loop)
-            audio.setVolume(volume)
-            audio.play()
-        })
+        const audio = this.audioAssets[audioFile]
+        audio.setLoop(loop)
+        audio.setVolume(volume)
+        audio.play()
+        // const audioLoader = new THREE.AudioLoader()
+        // audioLoader.load(audioFile, function(AudioBuffer) {
+        //     audio.setBuffer(AudioBuffer)
+        //     audio.setLoop(loop)
+        //     audio.setVolume(volume)
+        //     audio.play()
+        // })
         return audio
     }
 

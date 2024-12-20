@@ -96,11 +96,12 @@ export class GrassGeometry extends THREE.BufferGeometry {
   }
 }
 
-const cloudTexture = new THREE.TextureLoader().load('/game/assets/material/cloud.jpg')
-cloudTexture.wrapS = cloudTexture.wrapT = THREE.RepeatWrapping
 
 class Grass extends THREE.Mesh {
-  constructor(size, count, centerRadius) {
+  constructor(texture, size, count, centerRadius) {
+    const cloudTexture = texture
+    cloudTexture.wrapS = cloudTexture.wrapT = THREE.RepeatWrapping
+
     const geometry = new GrassGeometry(size, count)
     const material = new THREE.ShaderMaterial({
       uniforms: {
