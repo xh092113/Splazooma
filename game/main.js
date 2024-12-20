@@ -1,6 +1,8 @@
 import Grass from './grass.js'
 import TaichiFloor from './taichi_floor.js'
 import { fireVertexShader, fireFragmentShader } from './fire_shader.js'
+import { GLTFLoader } from "https://threejsfundamentals.org/threejs/resources/threejs/r132/examples/jsm/loaders/GLTFLoader.js";
+
 
 class UI{
     constructor(game){
@@ -921,20 +923,25 @@ class Game{
             "wall.jpg",
         ];
         const loadTexturePromises = textureFiles.map(filename => this.loadTextureAssets(filename))
+
+        this.gltfLoader = new GLTFLoader()
+        this.meshAssets = {}
+        const meshFiles = [
+            "bird.glb",
+        ];
+        const loadMeshPromises = meshFiles.map(filename => this.loadMeshAssets(filename))
     
-        const loadPromises = loadAudioPromises.concat(loadTexturePromises)
+        const loadPromises = loadAudioPromises.concat(loadTexturePromises).concat(loadMeshPromises)
         return Promise.all(loadPromises);
     }
 
     loadAudioAssets(filename){
-        this.assetsTotalNum += 1
         const game = this
         const audio = new THREE.Audio(this.listener)
         return new Promise((resolve, reject) => {
             this.audioLoader.load(this.assetsPath + "sound/" + filename, function(AudioBuffer) {
                 audio.setBuffer(AudioBuffer)
                 game.audioAssets[filename] = audio
-                game.assetsReadyNum += 1
                 resolve()
             }, 
             function (xhr) {
@@ -952,6 +959,23 @@ class Game{
             const texture = this.textureLoader.load('/game/assets/material/' + filename)
             this.textureAssets[filename] = texture
             resolve()
+        })
+    }
+
+    loadMeshAssets(filename){
+        const game = this
+        return new Promise((resolve, reject) => {
+            game.gltfLoader.load('/game/assets/mesh/' + filename, function (gltf){
+                game.meshAssets[filename] = gltf
+                resolve()
+            }, 
+            function (xhr) {
+                console.log((xhr.loaded / xhr.total) * 100 + '% loaded');
+            },
+            function (err) {
+                console.error('An error happened while loading the audio', err);
+                reject(err)
+            })
         })
     }
 
@@ -993,7 +1017,7 @@ class Game{
         
         this.sceneSize = 80
 
-        this.taichiFloor = new TaichiFloor(this, this.textureAssets['taichi_base.jpg'], this.sceneSize / 8)
+        this.taichiFloor = new TaichiFloor(this, this.textureAssets['taichi_base.jpg'], this.meshAssets['bird.glb'], this.sceneSize / 8)
         this.scene.add(this.taichiFloor)
         
         const wallWidth = 2

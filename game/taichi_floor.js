@@ -1,11 +1,10 @@
 import { GLTFLoader } from "https://threejsfundamentals.org/threejs/resources/threejs/r132/examples/jsm/loaders/GLTFLoader.js";
 
-
 const MIN_ACTIVE_INTENSITY = 0.0
 const MAX_ACTIVE_INTENSITY = 5.0
 
 class HintBird {
-  constructor(taichiFloor, birdId, buttonId, gltfLoader) {
+  constructor(taichiFloor, birdId, buttonId, mesh) {
     this.taichiFloor = taichiFloor
     this.birdId = birdId
     this.buttonId = buttonId
@@ -23,6 +22,29 @@ class HintBird {
     this.gather = false
 
     const object = this
+
+    // const gltf = mesh
+    // this.mesh = gltf.scene
+    // this.setPose()
+    // gltf.scene.scale.set(1, 1, 1)
+    // gltf.scene.traverse( function ( child ) {
+    //   if (child.isMesh) {
+    //       child.material = new THREE.MeshStandardMaterial({
+    //         color: 0x9370DB,
+    //         emissive: 0x9370DB,
+    //         emissiveIntensity: 0.0,
+    //         transparent: true,
+    //         opacity: 0.1,
+    //       })
+    //   }
+    // } );
+
+    // this.mixer = new THREE.AnimationMixer(gltf.scene)
+    // const action = this.mixer.clipAction(gltf.animations[0])
+    // action.setLoop(THREE.LoopPingPong)
+    // action.play()
+    // this.taichiFloor.buttons[buttonId].add(gltf.scene)
+    const gltfLoader = new GLTFLoader()
     gltfLoader.load('/game/assets/mesh/bird.glb', function (gltf){
       object.mesh = gltf.scene
       object.setPose()
@@ -103,7 +125,7 @@ class HintBird {
 }
 
 class TaichiFloor extends THREE.Mesh {
-  constructor(game, texture, radius) {
+  constructor(game, texture, birdMesh, radius) {
     const taichiFloorTexture = texture
     taichiFloorTexture.wrapS = taichiFloorTexture.wrapT = THREE.ClampToEdgeWrapping
     const floorGeometry = new THREE.CircleGeometry(radius*2, 32)
@@ -161,12 +183,11 @@ class TaichiFloor extends THREE.Mesh {
     this.activeTimes = [0.0, 0.0]
 
     this.maxSuperCount = 3
-    const gltfLoader = new GLTFLoader()
     this.hintBirds = []
     for (var i = 0; i < this.buttonNum; i++){
       this.hintBirds.push([])
       for (var j = 0; j < this.maxSuperCount; j++){
-        this.hintBirds[i].push(new HintBird(this, j, i, gltfLoader))
+        this.hintBirds[i].push(new HintBird(this, j, i, birdMesh))
       }
     }
   }
@@ -241,7 +262,7 @@ class TaichiFloor extends THREE.Mesh {
         this.effectPressed[id] = pressId
         this.buttonEffects[id].material.color.set(0x008000)
         this.buttonEffects[id].material.emissive.set(0x008000)
-        this.game.playAudio('/game/assets/sound/reverse_explosion.ogg')
+        this.game.playAudio('reverse_explosion.ogg')
         for (var j = 0; j < this.maxSuperCount; j++){
           this.hintBirds[id][j].setGather(true)
         }
@@ -257,7 +278,7 @@ class TaichiFloor extends THREE.Mesh {
   releaseSuperBullet(id){
     console.log("Super!")
     this.setCount(id, 0)
-    this.game.playAudio('/game/assets/sound/cherrybomb.ogg')
+    this.game.playAudio('cherrybomb.ogg')
     this.game.createSuperBullet(this.getButtonCenter(id).add(new THREE.Vector3(0, 10, 0)), this.effectPressed[id])
     this.effectPressed[id] = null
   }
