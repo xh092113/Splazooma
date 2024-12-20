@@ -100,12 +100,14 @@ const cloudTexture = new THREE.TextureLoader().load('/game/assets/material/cloud
 cloudTexture.wrapS = cloudTexture.wrapT = THREE.RepeatWrapping
 
 class Grass extends THREE.Mesh {
-  constructor(size, count) {
+  constructor(size, count, centerRadius) {
     const geometry = new GrassGeometry(size, count)
     const material = new THREE.ShaderMaterial({
       uniforms: {
         uCloud: { value: cloudTexture },
-        uTime: { value: 0 }
+        uTime: { value: 0 },
+        uRotateSpeed: { value: 0.0 },
+        uCenterRadius: { value: centerRadius*2.0 },
       },
       side: THREE.DoubleSide,
       vertexShader,
@@ -121,8 +123,9 @@ class Grass extends THREE.Mesh {
     this.add(floor)
   }
 
-  update(time) {
+  update(time, rotateSpeed) {
     this.material.uniforms.uTime.value = time
+    this.material.uniforms.uRotateSpeed.value = rotateSpeed
   }
 }
 

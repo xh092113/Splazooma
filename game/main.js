@@ -1,5 +1,6 @@
 import Grass from './grass.js'
 import TaichiFloor from './taichi_floor.js'
+import { fireVertexShader, fireFragmentShader } from './fire_shader.js'
 
 class UI{
     constructor(game){
@@ -153,22 +154,43 @@ class SuperBullet {
         if ((newExcludeR - newExcludeL) - (excludeR - excludeL) <= 2){
             return 2
         }
-        return (newExcludeR - newExcludeL) - (excludeR - excludeL) + this.computeMergeCount(newExcludeL, newExcludeR)
+        return (newExcludeR - newExcludeL) - (excludeR - excludeL) + this.computeMergeCount(colors, newExcludeL, newExcludeR)
     }
 
     updateTargetPosition(){
-        const colors = this.targetSnake.sphereColorIDs
+        var colors = this.targetSnake.sphereColorIDs
         var targetId = 0
-        var maxTargetDestroy = this.computeMergeCount(colors, 0, 1)
+        colors[0] = (colors[0] + 1) % 2
+        var maxTargetDestroy = 0
+        var initCount = 1
+        while(initCount <= colors.length && colors[initCount] == colors[0]){
+            initCount += 1
+        }
+        if (initCount >= 3){
+            maxTargetDestroy = initCount + this.computeMergeCount(colors, 0, initCount)
+        }
+        colors[0] = (colors[0] + 1) % 2
+        
         for (var i = 1; i < colors.length; i++){
-            const targetDestroy = this.computeMergeCount(colors, i, i+1)
-            if (targetDestroy > maxTargetDestroy){
-                targetId = i
-                maxTargetDestroy = targetDestroy
+            colors[i] = (colors[i] + 1) % 2
+            var initLeft = i
+            while(initLeft > 0 && colors[initLeft-1] == colors[i]){
+                initLeft -= 1
             }
+            var initRight = i+1
+            while(initRight <= colors.length && colors[initRight] == colors[i]){
+                initRight += 1
+            }
+            if (initRight - initLeft >= 3){
+                const targetDestroy = initRight - initLeft + this.computeMergeCount(colors, initLeft, initRight)
+                if (targetDestroy > maxTargetDestroy){
+                    targetId = i
+                    maxTargetDestroy = targetDestroy
+                }
+            }
+            colors[i] = (colors[i] + 1) % 2
         }
         const target = this.targetSnake.spheres[targetId]
-        console.log(targetId, maxTargetDestroy)
         this.targetPosition = new THREE.Vector3(target.position.x, target.position.y * 2.8, target.position.z)
     }
   
@@ -281,11 +303,15 @@ class Snake{
         this.turnRightTime = -1.0
         this.idleTime = -1.0
 
+        this.speedup = false
+        this.speeedUpTime = 0.0
+
         this.shootShakeMaxTime = 0.3
         this.shootShakeTime = -1.0
 
         this.mergeMaxCD = 1.0
         this.mergeCD = this.mergeMaxCD
+        this.mergeCombo = 0
     }
 
     getHeadQuat(){
@@ -309,7 +335,12 @@ class Snake{
     }
 
     getSpeedFactor(){
-        return (Math.exp((this.spheres.length - 1.0)* Math.log(0.8) / 7.0) + 0.2) * (1 + this.liveTime / 120)
+        var speedupFactor = (Math.exp((this.spheres.length - 1.0)* Math.log(0.8) / 7.0) + 0.2)
+        speedupFactor *= (1 + this.liveTime / 120)
+        if (this.speedup){
+            speedupFactor *= 1.5
+        }
+        return speedupFactor
     }
 
     AImove(deltaTime, snakes){
@@ -356,8 +387,19 @@ class Snake{
         this.spheres[0].position.set(originHeadPosition.x, originHeadPosition.y, originHeadPosition.z)
         this.spheres[0].quaternion.set(originHeadQuat.x, originHeadQuat.y, originHeadQuat.z, originHeadQuat.w)
         if (dieIndex != null){
-            var minLeftDistance = dieDistances[dieIndex-1]
-            // if (minLeftDistance > dieDistances[dieIndex+1]){
+            this.speedup = false
+
+            for (var i = 0; i < dieDistances.length; i++){
+                if (dieDistances[i] > dieDistances[dieIndex] * 1.2){
+                    if (i*2 < dieDistances.length){
+                        leftLiveCount += 1
+                    }
+                    else{
+                        rightLiveCount += 1
+                    }
+                }
+            }
+
             if (this.turnLeftTime < 0.0 && this.turnRightTime < 0.0){
                 if (leftLiveCount > rightLiveCount){
                     this.turnLeftTime = -1.0
@@ -371,12 +413,12 @@ class Snake{
                 }
             }
             else {
-                if (leftLiveCount > rightLiveCount + 1){
+                if (leftLiveCount > rightLiveCount + 2){
                     this.turnLeftTime = -1.0
                     this.turnRightTime = 0.5
                     this.idleTime = -1.0
                 }
-                else if (rightLiveCount > leftLiveCount + 1){
+                else if (rightLiveCount > leftLiveCount + 2){
                     this.turnLeftTime = 0.5
                     this.turnRightTime = -1.0
                     this.idleTime = -1.0
@@ -384,48 +426,78 @@ class Snake{
             }
         }
         else{
+            this.speedup = true
             if (this.idleTime < 0 && this.turnLeftTime < 0 && this.turnRightTime < 0){
-                const turnSignal = Math.random()
-                if (turnSignal < 1.0){
-                    var leftSnakeCount = 0
-                    var rightSnakeCount = 0
-                    for (var i = 0; i < snakes.length; i++){
-                        if (i != this.playerId){
-                            for (var j = 0; j < snakes[i].spheres.length; j++){
-                                if (snakes[i].sphereColorIDs[j] == this.bulletColorID){
-                                    const offset = getPosition(snakes[i].spheres[j]).sub(originHeadPosition)
-                                    if (offset.clone().cross(this.getHeadDirection()).y > 0){
-                                        rightSnakeCount++
-                                    }
-                                    else{
-                                        leftSnakeCount++
-                                    }
-                                }
-                            }
+                var superBulletActivate = false
+                var superBulletDistance = null
+                var superBulletPosition = null
+                for (var i = 0; i < this.game.taichiFloor.effectActives.length; i++){
+                    if (this.game.taichiFloor.effectActives[i]){
+                        const pos = this.game.taichiFloor.getButtonCenter(i)
+                        const dis = pos.clone().sub(originHeadPosition).length()
+                        if (superBulletDistance == null || superBulletDistance > dis){
+                            superBulletActivate = true
+                            superBulletDistance = dis
+                            superBulletPosition = pos
                         }
                     }
-                    // if (this.playerId == 0){
-                    //     console.log(leftSnakeCount, rightSnakeCount)
-                    // }
-                    if (leftSnakeCount > rightSnakeCount){
-                        // if (this.playerId == 0){
-                        //     console.log("left")
-                        // }
-                        this.turnLeftTime = 0.5
-                        this.turnRightTime = -1.0
+                }
+                if (superBulletActivate){
+                    const offset = superBulletPosition.sub(originHeadPosition)
+                    if (offset.clone().cross(this.getHeadDirection()).y > 0){
+                        this.turnLeftTime = -1.0
+                        this.turnRightTime = 0.3
                         this.idleTime = -1.0
                     }
-                    else if (leftSnakeCount < rightSnakeCount){
-                        // if (this.playerId == 0){
-                        //     console.log("right")
-                        // }
-                        this.turnLeftTime = -1.0
-                        this.turnRightTime = 0.5
+                    else{
+                        this.turnLeftTime = 0.3
+                        this.turnRightTime = -1.0
                         this.idleTime = -1.0
                     }
                 }
                 else{
-                    this.idleTime = 0.5
+                    const turnSignal = Math.random()
+                    if (turnSignal < 1.0){
+                        var leftSnakeCount = 0
+                        var rightSnakeCount = 0
+                        for (var i = 0; i < snakes.length; i++){
+                            if (i != this.playerId){
+                                for (var j = 0; j < snakes[i].spheres.length; j++){
+                                    if (snakes[i].sphereColorIDs[j] == this.bulletColorID){
+                                        const offset = getPosition(snakes[i].spheres[j]).sub(originHeadPosition)
+                                        if (offset.clone().cross(this.getHeadDirection()).y > 0){
+                                            rightSnakeCount++
+                                        }
+                                        else{
+                                            leftSnakeCount++
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        // if (this.playerId == 0){
+                        //     console.log(leftSnakeCount, rightSnakeCount)
+                        // }
+                        if (leftSnakeCount > rightSnakeCount){
+                            // if (this.playerId == 0){
+                            //     console.log("left")
+                            // }
+                            this.turnLeftTime = 0.5
+                            this.turnRightTime = -1.0
+                            this.idleTime = -1.0
+                        }
+                        else if (leftSnakeCount < rightSnakeCount){
+                            // if (this.playerId == 0){
+                            //     console.log("right")
+                            // }
+                            this.turnLeftTime = -1.0
+                            this.turnRightTime = 0.5
+                            this.idleTime = -1.0
+                        }
+                    }
+                    else{
+                        this.idleTime = 0.5
+                    }
                 }
             }
         }
@@ -500,11 +572,14 @@ class Snake{
         this.bulletCD = Math.max(this.bulletCD - deltaTime, -0.01)
         // Detect shooting
         if (!this.isAI){
-            if (keyPressed[this.controlKeys[3]]){
-                this.bulletColorID = (this.bulletColorID + 1) % this.sphereColors.length
-                this.bulletColor = this.sphereColors[this.bulletColorID]
+            this.speedup = keyPressed[this.controlKeys[2]]
+            if (this.speedup){
+                this.speeedUpTime = Math.min(0.2, this.speeedUpTime + deltaTime)
             }
-            if (keyPressed[this.controlKeys[2]]){
+            else{
+                this.speeedUpTime = Math.max(0.0, this.speeedUpTime - deltaTime)
+            }
+            if (keyPressed[this.controlKeys[3]]){
                 this.shoot(bullets)
             }
         }
@@ -513,6 +588,9 @@ class Snake{
         this.attachCameraToActor()
 
         this.processMerge(deltaTime)
+        if (this.spheres.length == 0){
+            return
+        }
 
         // Update hint ball
         const sceneSpheres = this.spheres.slice(1)
@@ -579,7 +657,13 @@ class Snake{
             )
             relativeCameraOffset = relativeCameraOffset.add(shakeOffset)
         }
+        
+        relativeCameraOffset.x *= 1 + 0.2 * this.speeedUpTime / 0.2
+
         const globalCameraPose = relativeCameraOffset.applyMatrix4(actor.matrixWorld)
+        const sceneBound = this.game.sceneSize / 2.0 - 2.0
+        globalCameraPose.x = Math.max(Math.min(globalCameraPose.x, sceneBound), -sceneBound)
+        globalCameraPose.z = Math.max(Math.min(globalCameraPose.z, sceneBound), -sceneBound)
         this.camera.position.set(globalCameraPose.x, globalCameraPose.y, globalCameraPose.z)
         this.camera.lookAt(actor.position)
     }
@@ -624,11 +708,13 @@ class Snake{
         }
     }
 
-    processShootReward(reward){
+    processShootReward(reward, combo){
+        combo = Math.min(combo-1, 1)
         if (this.spheres.length == 0){
             return
         }
-        for (var i = 0; i < reward; i++){
+        console.log(this.playerId, reward, combo)
+        for (var i = 0; i < reward + combo; i++){
             var colorID = Math.floor(Math.random() * (this.sphereColors.length-1))
             if (colorID >= this.sphereColorIDs[this.spheres.length-1]){
                 colorID += 1
@@ -672,7 +758,8 @@ class Snake{
             console.log("Waiting Shot")
         }
         this.processingBody = true
-        this.destroyBody(shotIndex, shotIndex + 1)
+        this.sphereColorIDs[shotIndex] = (this.sphereColorIDs[shotIndex] + 1) % this.sphereColors.length
+        this.spheres[shotIndex].material.color.set(this.sphereColors[this.sphereColorIDs[shotIndex]])
         this.processingBody = false
     }
 
@@ -714,6 +801,12 @@ class Snake{
         }
         while(mergeUpdate)
         if (this.mergeCD < 0.0){
+            if (hasMerged){
+                this.mergeCombo += 1
+            }
+            else{
+                this.mergeCombo = 0
+            }
             for (var i = 0; i < this.spheres.length; i++){
                 this.spheres[i].material.color.set(this.sphereColors[this.sphereColorIDs[i]])
                 this.spheres[i].material.transparent = false
@@ -862,7 +955,7 @@ class Game{
         zRightWallMesh.rotation.y = Math.PI
         this.scene.add(zRightWallMesh)
 
-        this.grass = new Grass(this.sceneSize, this.sceneSize * this.sceneSize * 50)
+        this.grass = new Grass(this.sceneSize, this.sceneSize * this.sceneSize * 50, this.sceneSize / 8)
         this.scene.add(this.grass)
         
         
@@ -1014,7 +1107,7 @@ class Game{
         requestAnimationFrame(this.animate.bind(this))
         const deltaTime = this.clock.getDelta()
 
-        this.grass.update(this.clock.getElapsedTime())
+        this.grass.update(this.clock.getElapsedTime (), this.taichiFloor.rotateSpeed / this.taichiFloor.rotateMaxSpeed)
         this.taichiFloor.update(deltaTime)
 
         if (this.gameActivate){
@@ -1069,7 +1162,7 @@ class Game{
                 if (this.snakes[i].mergeCount > 0){
                     for (var j = 0; j < this.playerNum; j++){
                         if (i != j){
-                            this.snakes[j].processShootReward(this.snakes[i].mergeCount)
+                            this.snakes[j].processShootReward(this.snakes[i].mergeCount, this.snakes[i].mergeCombo)
                         }
                     }
                 }
@@ -1079,7 +1172,7 @@ class Game{
                 var pressId = null
                 for (var i = 0; i < this.playerNum; i++){
                     for (var j = 0; j < this.snakes[i].spheres.length; j++){
-                        if (detectCircleCollision(this.snakes[i].spheres[j].position, this.taichiFloor.buttonCenters[k], this.taichiFloor.buttonRaidus)){
+                        if (detectCircleCollision(this.snakes[i].spheres[j].position, this.taichiFloor.getButtonCenter(k), this.taichiFloor.buttonRaidus)){
                             isPressed = true
                             pressId = i
                             break
@@ -1119,8 +1212,9 @@ class Game{
             this.renderer.render(this.scene, this.cameras[i])
         }
 
-        if (!this.gameOver && this.gameTime > 50.0 && this.bgmFile != "/game/assets/sound/bgm_Fight.m4a"){
+        if (!this.gameOver && this.gameTime > 20.0 && this.bgmFile != "/game/assets/sound/bgm_Fight.m4a"){
             this.startUpdateBgm("Fight")
+            this.taichiFloor.startRotate = true
         }
         this.updateBgm(deltaTime)
     }
@@ -1196,7 +1290,7 @@ function getPosition(mesh){
 
 function createSphere(scene, radius, color, opacity, position=null, quaternion=null){
     const sphere_geometry = new THREE.SphereGeometry(radius, 32, 16)
-    const material = new THREE.MeshBasicMaterial({
+    var material = new THREE.MeshBasicMaterial({
         color: color,
         transparent: opacity < 1.0,
         opacity: opacity,

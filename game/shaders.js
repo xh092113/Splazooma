@@ -1,16 +1,31 @@
 export const vertexShader = /* glsl */ `
   uniform float uTime;
+  uniform float uRotateSpeed;
+  uniform float uCenterRadius;
 
   varying vec3 vPosition;
   varying vec2 vUv;
   varying vec3 vNormal;
+  varying float vDistanceToCenter;
 
-  float wave(float waveSize, float tipDistance, float centerDistance) {
+  vec2 wave(float waveSize, float tipDistance, float centerDistance) {
     // Tip is the fifth vertex drawn per blade
     bool isTip = (gl_VertexID + 1) % 5 == 0;
 
     float waveDistance = isTip ? tipDistance : centerDistance;
-    return sin((uTime * 2.0) + waveSize) * waveDistance;
+    vec2 waveVec = vec2(sin((uTime * 2.0) + waveSize), 0.0) * waveDistance;
+
+    if (uRotateSpeed > 0.0){
+      vDistanceToCenter = vPosition.x * vPosition.x + vPosition.z * vPosition.z;
+      if (vDistanceToCenter < (uCenterRadius + 15.0) * (uCenterRadius + 15.0)){
+        float lambda = 3.0 * uRotateSpeed * ((uCenterRadius + 15.0) * (uCenterRadius + 15.0) - vDistanceToCenter) / (30.0 * uCenterRadius + 225.0);
+        vec2 centerOffset = normalize(vec2(vPosition.x, vPosition.z));
+        waveVec += centerOffset * waveDistance * lambda;
+        waveVec += vec2(centerOffset.y, -centerOffset.x) * waveDistance * lambda;
+      }
+    }
+
+    return waveVec;
   }
 
   void main() {
@@ -21,7 +36,9 @@ export const vertexShader = /* glsl */ `
     if (vPosition.y < 0.0) {
       vPosition.y = 0.0;
     } else {
-      vPosition.x += wave(uv.x * 10.0, 0.3, 0.1);      
+      vec2 waveVec = wave(uv.x * 10.0, 0.3, 0.1);
+      vPosition.x += waveVec.x;
+      vPosition.z += waveVec.y;      
     }
 
     gl_Position = projectionMatrix * modelViewMatrix * vec4(vPosition, 1.0);

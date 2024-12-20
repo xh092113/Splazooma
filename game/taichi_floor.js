@@ -1,8 +1,108 @@
+import { GLTFLoader } from "https://threejsfundamentals.org/threejs/resources/threejs/r132/examples/jsm/loaders/GLTFLoader.js";
+
 const taichiFloorTexture = new THREE.TextureLoader().load('/game/assets/material/taichi_base.jpg')
 taichiFloorTexture.wrapS = taichiFloorTexture.wrapT = THREE.ClampToEdgeWrapping
 
 const MIN_ACTIVE_INTENSITY = 0.0
 const MAX_ACTIVE_INTENSITY = 5.0
+
+class HintBird {
+  constructor(taichiFloor, birdId, buttonId, gltfLoader) {
+    this.taichiFloor = taichiFloor
+    this.birdId = birdId
+    this.buttonId = buttonId
+    this.mixer = null
+    this.mesh = null
+
+    this.maxRadius = 4.0
+    this.minRadius = 0.2
+    this.radius = this.maxRadius
+    this.theta = birdId * Math.PI * 2 / 3
+
+    this.rotateSpeed = 0.6
+
+    this.activate = false
+    this.gather = false
+
+    const object = this
+    gltfLoader.load('/game/assets/mesh/bird.glb', function (gltf){
+      object.mesh = gltf.scene
+      object.setPose()
+      gltf.scene.scale.set(1, 1, 1)
+      gltf.scene.traverse( function ( child ) {
+        if (child.isMesh) {
+            child.material = new THREE.MeshStandardMaterial({
+              color: 0x9370DB,
+              emissive: 0x9370DB,
+              emissiveIntensity: 0.0,
+              transparent: true,
+              opacity: 0.1,
+            })
+        }
+      } );
+
+      object.mixer = new THREE.AnimationMixer(gltf.scene)
+      const action = object.mixer.clipAction(gltf.animations[0])
+      action.setLoop(THREE.LoopPingPong)
+      action.play()
+      object.taichiFloor.buttons[buttonId].add(gltf.scene)
+
+    }, undefined, function (error) {
+      console.error(error)
+    })
+  }
+
+  setPose(){
+    const thetaOffset = (this.buttonId % 2 == 0) ? 0 : Math.PI
+    this.mesh.rotation.set(Math.PI / 2, this.theta, 0)
+    this.mesh.position.set(this.radius * Math.cos(this.theta + thetaOffset), this.radius * Math.sin(this.theta + thetaOffset), 10)
+  }
+
+  reset(){
+    this.radius = this.maxRadius
+    this.theta = this.birdId * Math.PI * 2 / 3
+    this.setActivate(false)
+    this.setGather(false)
+  }
+
+  update(deltaTime){
+    if (this.mesh){
+      this.theta += this.rotateSpeed * deltaTime * ((this.buttonId % 2 == 0) ? 1: -1)
+      if (this.mixer){
+        this.mixer.update(deltaTime)
+      }
+      if (this.gather){
+        this.radius = Math.max(this.minRadius, this.radius - deltaTime / 0.5 * (this.maxRadius - this.minRadius))
+      }
+      else{
+        this.radius = Math.min(this.maxRadius, this.radius + deltaTime / 0.5 * (this.maxRadius - this.minRadius))
+      }
+      this.setPose()
+    }
+  }
+
+  setActivate(activate){
+    this.activate = activate
+    this.mesh.traverse( function ( child ) {
+      if (child.isMesh) {
+        if (activate){
+          child.material.opacity = 0.9
+          child.material.emissiveIntensity = 0.5
+        }
+        else{
+          child.material.opacity = 0.1
+          child.material.emissiveIntensity = 0.1
+        }
+      }
+    } );
+    if (~activate){
+      this.setGather(false)
+    }
+  }
+  setGather(gather){
+    this.gather = gather
+  }
+}
 
 class TaichiFloor extends THREE.Mesh {
   constructor(game, radius) {
@@ -13,6 +113,10 @@ class TaichiFloor extends THREE.Mesh {
     this.radius = radius
     this.rotation.x = -Math.PI / 2
     this.position.y = 0.02
+
+    this.startRotate = false
+    this.rotateMaxSpeed = 0.3
+    this.rotateSpeed = 0.0
 
     const buttonEffectGeometry = new THREE.CylinderGeometry(radius / 8.0, radius / 8.0, 0.2, 32, 1)
     buttonEffectGeometry.rotateX(Math.PI / 2)
@@ -49,18 +153,27 @@ class TaichiFloor extends THREE.Mesh {
       this.buttons.push(button)
       this.buttonEffects.push(buttonEffect)
       this.buttonCounts.push(0)
-      this.buttonCenters.push(new THREE.Vector3(0.0, 0.01, -this.buttonPositionY[i]))
+      this.buttonCenters.push(new THREE.Vector3(0.0, this.buttonPositionY[i], 0.01))
     }
 
     this.effectActives = [false, false]
     this.effectPressed = [null, null]
     this.activeTimes = [0.0, 0.0]
 
-    this.buttonCount1 = 0
-    this.buttonCount2 = 0
+    this.maxSuperCount = 3
+    const gltfLoader = new GLTFLoader()
+    this.hintBirds = []
+    for (var i = 0; i < this.buttonNum; i++){
+      this.hintBirds.push([])
+      for (var j = 0; j < this.maxSuperCount; j++){
+        this.hintBirds[i].push(new HintBird(this, j, i, gltfLoader))
+      }
+    }
   }
 
   reset(){
+    this.startRotate = false
+    this.rotateSpeed = 0.0
     for (var i = 0; i < this.buttonEffects.length; i++){
       this.buttonCounts[i] = 0
       this.effectActives[i] = false
@@ -69,9 +182,27 @@ class TaichiFloor extends THREE.Mesh {
       this.buttonEffects[i].material.emissive.set(0x404000)
       this.buttonEffects[i].material.emissiveIntensity = 0.0
     }
+    for (var i = 0; i < this.buttonNum; i++){
+      for (var j = 0; j < this.maxSuperCount; j++){
+        if (this.hintBirds[i][j].mixer){
+          this.hintBirds[i][j].reset()
+        }
+      }
+    }
   }
 
   update(deltaTime){
+    for (var i = 0; i < this.buttonNum; i++){
+      for (var j = 0; j < this.maxSuperCount; j++){
+        this.hintBirds[i][j].update(deltaTime)
+      }
+    }
+    if (this.startRotate){
+      if (this.rotateSpeed < this.rotateMaxSpeed){
+        this.rotateSpeed += this.rotateMaxSpeed * deltaTime / 20.0
+      }
+      this.rotateZ(this.rotateSpeed * deltaTime)
+    }
     // console.log(this.buttonCounts, this.effectActives, this.effectPressed)
     for (var i = 0; i < this.buttonEffects.length; i++){
       if (this.effectActives[i] && this.effectPressed[i] == null){
@@ -87,9 +218,16 @@ class TaichiFloor extends THREE.Mesh {
     }
   }
 
+  getButtonCenter(id){
+    return this.buttonCenters[id].clone().applyMatrix4(this.matrixWorld)
+  }
+
   setCount(id, cnt){
-    this.buttonCounts[id] = cnt
-    this.effectActives[id] = (this.buttonCounts[id] >= 3)
+    this.buttonCounts[id] = Math.min(cnt, this.maxSuperCount)
+    this.effectActives[id] = (this.buttonCounts[id] >= this.maxSuperCount)
+    for (var j = 0; j < this.maxSuperCount; j++){
+      this.hintBirds[id][j].setActivate(j < cnt)
+    }
   }
 
   updateCount(id){
@@ -104,6 +242,9 @@ class TaichiFloor extends THREE.Mesh {
         this.buttonEffects[id].material.color.set(0x008000)
         this.buttonEffects[id].material.emissive.set(0x008000)
         this.game.playAudio('/game/assets/sound/reverse_explosion.ogg')
+        for (var j = 0; j < this.maxSuperCount; j++){
+          this.hintBirds[id][j].setGather(true)
+        }
       }
       else if (!state && this.effectPressed[id] != null){
         this.buttonEffects[id].material.color.set(0x404000)
@@ -117,7 +258,7 @@ class TaichiFloor extends THREE.Mesh {
     console.log("Super!")
     this.setCount(id, 0)
     this.game.playAudio('/game/assets/sound/cherrybomb.ogg')
-    this.game.createSuperBullet(this.buttonCenters[id].clone().add(new THREE.Vector3(0, 5, 0)), this.effectPressed[id])
+    this.game.createSuperBullet(this.getButtonCenter(id).add(new THREE.Vector3(0, 10, 0)), this.effectPressed[id])
     this.effectPressed[id] = null
   }
 
