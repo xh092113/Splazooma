@@ -11,6 +11,7 @@ class UI{
         const battlePlayBtn = document.getElementById('battlePlayBtn')
         singlePlayBtn.addEventListener('click', this.playSingleBtnPressed.bind(this))
         battlePlayBtn.addEventListener('click', this.playBattleBtnPressed.bind(this))
+        this.setPlayButtonActive(false)
     }
 
     set visible(value){
@@ -23,19 +24,26 @@ class UI{
         ui.style.display = display
     }
 
-    playSingleBtnPressed(){
+    setPlayButtonActive(active){
         const singlePlayBtn = document.getElementById('singlePlayBtn')
         const battlePlayBtn = document.getElementById('battlePlayBtn')
-        singlePlayBtn.style.display = 'none'
-        battlePlayBtn.style.display = 'none'
+        if (active){
+            singlePlayBtn.style.display = 'block'
+            battlePlayBtn.style.display = 'block'
+        }
+        else{
+            singlePlayBtn.style.display = 'none'
+            battlePlayBtn.style.display = 'none'
+        }
+    }
+
+    playSingleBtnPressed(){
+        this.setPlayButtonActive(false)
         this.game.GameStart([true, false])
     }
 
     playBattleBtnPressed(){
-        const singlePlayBtn = document.getElementById('singlePlayBtn')
-        const battlePlayBtn = document.getElementById('battlePlayBtn')
-        singlePlayBtn.style.display = 'none'
-        battlePlayBtn.style.display = 'none'
+        this.setPlayButtonActive(false)
         this.game.GameStart([true, true])
     }
 
@@ -43,15 +51,9 @@ class UI{
         // const gameover = document.getElementById('gameover')
         // gameover.style.display = 'block'
         setTimeout(hideGameOver, 3000)
-
+        const ui = this
         function hideGameOver(){
-            // gameover.style.display = 'none'
-            const ui = document.getElementById('ui')
-            const singlePlayBtn = document.getElementById('singlePlayBtn')
-            const battlePlayBtn = document.getElementById('battlePlayBtn')
-            // ui.style.display = 'block'
-            singlePlayBtn.style.display = 'block'
-            battlePlayBtn.style.display = 'block'
+            ui.setPlayButtonActive(true)
         }
     }
 }
@@ -128,7 +130,7 @@ class SuperBullet {
       this.shoorter = shooter
       this.targetSnake = targetSnake
       this.radius = bulletRadius
-      this.color = new THREE.Color(0x9370DB)
+      this.color = 0x9370DB
       this.bulletMesh = this.shoorter.game.createSphere(scene, bulletRadius, this.color, 1.0, initBulletPosition)
       this.speed = speed
       this.outBoundary = false
@@ -265,6 +267,7 @@ class Snake{
         ]
         this.spheres = []
         this.sphereColorIDs = []
+        this.mergeStates = []
         this.sphere_num = sphere_num
         this.bodyRadius = sphere_radius
         this.bulletRadius = sphere_radius
@@ -288,7 +291,19 @@ class Snake{
             const sphere = this.game.createSphere(this.scene, this.bodyRadius, color, 1.0, initOffset.clone().add(initPosition))
             this.spheres.push(sphere)
             this.sphereColorIDs.push(colorID)
+            this.mergeStates.push(false)
         }
+        const headTexture = this.game.textureAssets["head.png"]
+        headTexture.minFilter = THREE.LinearFilter;
+        headTexture.magFilter = THREE.LinearFilter;
+        headTexture.format = THREE.RGBAFormat
+        this.headImage = new THREE.Mesh(
+            new THREE.PlaneGeometry(this.bodyRadius * 2.2, this.bodyRadius * 2.2).rotateY(Math.PI/2),
+            new THREE.MeshBasicMaterial({map: headTexture, transparent: true, side: THREE.DoubleSide})
+        )
+        this.game.scene.add(this.headImage)
+        this.headImage.position.set(this.spheres[0].position.x + this.bodyRadius + 0.2, this.spheres[0].position.y + 0.5, this.spheres[0].position.z)
+        this.headImage.rotation.set(this.spheres[0].rotation.x, this.spheres[0].rotation.y, this.spheres[0].rotation.z)
         
         // Create hint ball
         this.bulletColorID = Math.floor(Math.random() * this.sphereColors.length)
@@ -549,6 +564,8 @@ class Snake{
 
     update(deltaTime, keyPressed, snakes, bullets){
         // Control head sphere
+
+        this.processMerge(deltaTime)
         if (this.spheres.length == 0){
             return
         }
@@ -592,11 +609,7 @@ class Snake{
 
         // Update player camera
         this.attachCameraToActor()
-
-        this.processMerge(deltaTime)
-        if (this.spheres.length == 0){
-            return
-        }
+        this.attachHeadToActor()
 
         // Update hint ball
         const sceneSpheres = this.spheres.slice(1)
@@ -666,12 +679,19 @@ class Snake{
         
         relativeCameraOffset.x *= 1 + 0.2 * this.speeedUpTime / 0.2
 
-        const globalCameraPose = relativeCameraOffset.applyMatrix4(actor.matrixWorld)
+        const globalCameraPose = relativeCameraOffset.applyQuaternion(actor.quaternion).add(actor.position)
         const sceneBound = this.game.sceneSize / 2.0 - 2.0
         globalCameraPose.x = Math.max(Math.min(globalCameraPose.x, sceneBound), -sceneBound)
         globalCameraPose.z = Math.max(Math.min(globalCameraPose.z, sceneBound), -sceneBound)
         this.camera.position.set(globalCameraPose.x, globalCameraPose.y, globalCameraPose.z)
         this.camera.lookAt(actor.position)
+    }
+    attachHeadToActor(){
+        const actor = this.spheres[0]
+        var relativeHeadOffset = new THREE.Vector3(this.bodyRadius + 0.2, 0.5, 0)
+        const globalHeadPose = relativeHeadOffset.applyMatrix4(actor.matrixWorld)
+        this.headImage.position.set(globalHeadPose.x, globalHeadPose.y, globalHeadPose.z)
+        this.headImage.rotation.set(actor.rotation.x, actor.rotation.y, actor.rotation.z)
     }
 
     detectSelfCollision(){
@@ -780,32 +800,38 @@ class Snake{
         var mergeUpdate = false
         var lastUpdateIndex = 0
         var hasMerged = false
-        do{
-            mergeUpdate = false
-            for (var i = Math.max(lastUpdateIndex, 0); i < this.spheres.length-2; i++){
-                if (this.sphereColorIDs[i] == this.sphereColorIDs[i+1] && this.sphereColorIDs[i+1] == this.sphereColorIDs[i+2]){
-                    var j = i+3
-                    while (j < this.spheres.length && this.sphereColorIDs[j] == this.sphereColorIDs[i])
-                        j++
-                    for (var k = i; k < j; k++){
+        // do{
+        mergeUpdate = false
+        for (var i = Math.max(lastUpdateIndex, 0); i < this.spheres.length-2; i++){
+            if (this.sphereColorIDs[i] == this.sphereColorIDs[i+1] && this.sphereColorIDs[i+1] == this.sphereColorIDs[i+2]){
+                var j = i+3
+                while (j < this.spheres.length && this.sphereColorIDs[j] == this.sphereColorIDs[i])
+                    j++
+                for (var k = i; k < j; k++){
+                    if (!this.mergeStates[k]){
                         this.spheres[k].material = this.game.getSphereMaterial(0x9370DB)
-                        this.spheres[k].material.transparent = true
-                        this.spheres[k].material.opacity = 0.9
-                    }
-                    if (this.mergeCD < 0.0){
-                        hasMerged = true
-                        this.mergeBody(i, j)
-                        this.mergeCount += j-i-2
-                        mergeUpdate = true
-                        lastUpdateIndex = i
-                        this.game.playAudio('points.ogg')
-                        break
+                        this.mergeStates[k] = true
                     }
                 }
+                if (this.mergeCD < 0.0){
+                    hasMerged = true
+                    this.mergeBody(i, j)
+                    this.mergeCount += j-i-2
+                    mergeUpdate = true
+                    lastUpdateIndex = i
+                    this.game.playAudio('points.ogg')
+                    break
+                }
+                i = j-1
             }
-            
+            else if (this.mergeStates[i]){
+                this.mergeStates[i] = false
+                this.spheres[i].material = this.game.getSphereMaterial(this.sphereColors[this.sphereColorIDs[i]])
+            }
         }
-        while(mergeUpdate)
+            
+        // }
+        // while(mergeUpdate)
         if (this.mergeCD < 0.0){
             if (hasMerged){
                 this.mergeCombo += 1
@@ -813,11 +839,11 @@ class Snake{
             else{
                 this.mergeCombo = 0
             }
-            for (var i = 0; i < this.spheres.length; i++){
-                this.spheres[i].material = this.game.getSphereMaterial(this.sphereColors[this.sphereColorIDs[i]])
-                this.spheres[i].material.transparent = false
-                this.spheres[i].material.opacity = 1.0
-            }
+            // for (var i = 0; i < this.spheres.length; i++){
+                // this.spheres[i].material = this.game.getSphereMaterial(this.sphereColors[this.sphereColorIDs[i]])
+                // this.spheres[i].material.transparent = false
+            //     // this.spheres[i].material.opacity = 1.0
+            // }
             this.mergeCD = this.mergeMaxCD
         }
         this.processingBody = false
@@ -837,12 +863,14 @@ class Snake{
             this.spheres[this.spheres.length-1].position.set(newTailPosition.x, newTailPosition.y, newTailPosition.z)
             this.spheres.splice(shotIndex, 0, newSphere)
             this.sphereColorIDs.splice(shotIndex, 0, colorID)
+            this.mergeStates.splice(shotIndex, 0, false)
         }
         else{
             const newTailPosition = tailDirection.clone().multiplyScalar(this.bodyRadius*(2-this.sphere_overlap_ratio)).add(getPosition(this.spheres[this.spheres.length-1]))
             const newSphere = this.game.createSphere(this.scene, this.bodyRadius, color, 1.0, newTailPosition)
             this.spheres.push(newSphere)
             this.sphereColorIDs.push(colorID)
+            this.mergeStates.push(false)
         }
 
         this.spheres[0].quaternion.set(headQuat.x, headQuat.y, headQuat.z, headQuat.w)
@@ -859,6 +887,7 @@ class Snake{
         }
         this.spheres.splice(startIndex, endIndex-startIndex)
         this.sphereColorIDs.splice(startIndex, endIndex-startIndex)
+        this.mergeStates.splice(startIndex, endIndex-startIndex)
         if (this.spheres.length > 0){
             this.spheres[0].quaternion.set(headQuat.x, headQuat.y, headQuat.z, headQuat.w)
         }
@@ -886,6 +915,8 @@ class Snake{
         this.hintBall.material.dispose()
         this.hintBall.geometry.dispose()
         this.hintBall = null
+        
+        this.scene.remove(this.headImage)
     }
 }
 
@@ -933,6 +964,8 @@ class Game{
             "explosure.png",
             "taichi_base.jpg",
             "wall.jpg",
+            "head.png",
+            "hollow.png",
         ];
         const loadTexturePromises = textureFiles.map(filename => this.loadTextureAssets(filename))
 
@@ -1046,6 +1079,8 @@ class Game{
         const directionalLight = new THREE.PointLight(0xffffff, 1)
         directionalLight.position.set(0, 30, 0)
         this.scene.add(directionalLight)
+
+        this.ui = new UI(this)
         
         this.sceneSize = 80
 
@@ -1064,11 +1099,15 @@ class Game{
         })
 
         const titlePromise = new Promise((resolve, reject) => {
-            const texture = game.textureLoader.load('/game/assets/UI/title.jpg')
+            const texture = game.textureLoader.load('/game/assets/UI/title.png')
+            texture.minFilter = THREE.LinearFilter;
+            texture.magFilter = THREE.LinearFilter;
+            texture.format = THREE.RGBAFormat
 
             game.outTitleMesh = new THREE.Mesh(
-                new THREE.CircleGeometry(game.sceneSize / 4, 32),
-                new THREE.MeshBasicMaterial({map: texture})
+                // new THREE.CircleGeometry(game.sceneSize / 4, 32),
+                new THREE.PlaneGeometry(game.sceneSize / 2, game.sceneSize / 2),
+                new THREE.MeshBasicMaterial({map: texture, transparent: true})
             )
             game.scene.add(game.outTitleMesh)
             game.outTitleMesh.rotation.x = -Math.PI / 2
@@ -1099,7 +1138,6 @@ class Game{
         // wallTexture.repeat.set(3, 3)    
         // const wallMaterial = new THREE.MeshBasicMaterial({map: wallTexture})
         const wallMaterial = this.materialAssets["Snow"]
-        console.log(wallMaterial)
 
         const xLeftWallMesh = new THREE.Mesh(wallGeometry, wallMaterial)
         xLeftWallMesh.position.x = -this.sceneSize/2 - wallWidth/2
@@ -1118,7 +1156,7 @@ class Game{
         zRightWallMesh.rotation.y = Math.PI
         this.scene.add(zRightWallMesh)
 
-        this.grass = new Grass(this.textureAssets["cloud.jpg"], this.sceneSize, this.sceneSize * this.sceneSize * 50, this.sceneSize / 8)
+        this.grass = new Grass(this.textureAssets["cloud.jpg"], this.sceneSize, this.sceneSize * this.sceneSize * 20, this.sceneSize / 8)
         this.scene.add(this.grass)
         
         
@@ -1173,7 +1211,6 @@ class Game{
         this.bgmVolume = this.bgmMaxVolume
 
         this.gameActivate = false
-        this.ui = new UI(this)
 
         this.snakes = []
         this.bullets = []
@@ -1219,7 +1256,7 @@ class Game{
             if (!this.playerStats[i]){
                 this.snakes[i].isAI = true
             }
-            // this.snakes[i].isAI = true   
+            this.snakes[i].isAI = true   
         }
         this.startUpdateBgm("Play")
     }
@@ -1273,143 +1310,154 @@ class Game{
             this.outTitleMesh.rotateZ(-2.0 * deltaTime)
             this.render(true)
         }
-        else if (this.camerasReadyCnt < this.cameras.length){
-            // this.inScene = true
-            if (this.titleCameraReady == false){
-                this.titleCameraSpeed *= (1 + 2 * deltaTime)
-                if (this.titleCameraSpeed > 30){
-                    this.titleCameraSpeed = 30
-                }
-                this.titleCameraReady = this.cameraFly(this.titleCamera, new THREE.Vector3(0, 38, 0), deltaTime, this.titleCameraSpeed)
-                this.render(true)
-            }
-            else{
-                for (var i = 0; i < this.cameras.length; i++){
-                    if (this.camerasReady[i]){
-                        continue
-                    }
-                    var relativeCameraOffset = new THREE.Vector3(-12, 6, 0)
-                    this.camerasReady[i] = this.cameraFly(
-                        this.cameras[i],
-                        relativeCameraOffset.applyMatrix4(this.snakes[i].spheres[0].matrixWorld),
-                        deltaTime,
-                        15.0,
-                        this.snakes[i].spheres[0].position.clone()
-                    )
-                    if (this.camerasReady[i]){
-                        this.camerasReadyCnt += 1
-                    }
-                }
-                this.render()
-            }
-        }
         else{
             this.grass.update(this.clock.getElapsedTime (), this.taichiFloor.rotateSpeed / this.taichiFloor.rotateMaxSpeed)
             this.taichiFloor.update(deltaTime)
-    
-            if (this.gameActivate){
-                this.gameTime += deltaTime
-    
-                for (var i = 0; i < this.bullets.length; i++){
-                    const bullet = this.bullets[i]
-                    bullet.fly(deltaTime)
-                    for (var j = 0; j < this.playerNum; j++){
-                        bullet.detectSnakeCollision(this.snakes[j])
-                        if (bullet.toDestroy){
-                            break
+            if (this.camerasReadyCnt < this.cameras.length){
+                // this.inScene = true
+                if (this.titleCameraReady == false){
+                    this.titleCameraSpeed *= (1 + 2 * deltaTime)
+                    if (this.titleCameraSpeed > 30){
+                        this.titleCameraSpeed = 30
+                    }
+                    this.titleCameraReady = this.cameraFly(this.titleCamera, new THREE.Vector3(0, 38, 0), deltaTime, this.titleCameraSpeed)
+                    this.render(true)
+                }
+                else{
+                    for (var i = 0; i < this.cameras.length; i++){
+                        if (this.camerasReady[i]){
+                            continue
+                        }
+                        var relativeCameraOffset = new THREE.Vector3(-12, 6, 0)
+                        this.camerasReady[i] = this.cameraFly(
+                            this.cameras[i],
+                            relativeCameraOffset.applyMatrix4(this.snakes[i].spheres[0].matrixWorld),
+                            deltaTime,
+                            15.0,
+                            this.snakes[i].spheres[0].position.clone()
+                        )
+                        if (this.camerasReady[i]){
+                            this.camerasReadyCnt += 1
                         }
                     }
-                    for (var j = i+1; j < this.bullets.length; j++){
-                        bullet.detectBulletCollision(this.bullets[j])
-                    }
-                    // bullet.detectWallCollision(0, -sceneSize/2)
-                    // bullet.detectWallCollision(0, sceneSize/2)
-                    // bullet.detectWallCollision(1, -sceneSize/2)
-                    // bullet.detectWallCollision(1, sceneSize/2)
-                }
-                const toDestroyBullets = this.bullets.filter(bullet => bullet.toDestroy)
-                this.bullets = this.bullets.filter(bullet => !bullet.toDestroy)
-                for (var i = 0; i < toDestroyBullets.length; i++){
-                    const bullet = toDestroyBullets[i]
-                    bullet.destroy()
-                }
-                
-                // super bullets
-                for (var i = 0; i < this.superBullets.length; i++){
-                    const bullet = this.superBullets[i]
-                    bullet.fly(deltaTime)
-                    for (var j = 0; j < this.playerNum; j++){
-                        bullet.detectSnakeCollision(this.snakes[j])
-                        if (bullet.toDestroy){
-                            break
-                        }
-                    }
-                }
-                const toDestroySuperBullets = this.superBullets.filter(bullet => bullet.toDestroy)
-                this.superBullets = this.superBullets.filter(bullet => !bullet.toDestroy)
-                for (var i = 0; i < toDestroySuperBullets.length; i++){
-                    const bullet = toDestroySuperBullets[i]
-                    bullet.destroy()
-                }
-            
-                for (var i = 0; i < this.playerNum; i++){
-                    this.snakes[i].update(deltaTime, this.keyPressed, this.snakes, this.bullets)
-                }
-                for (var i = 0; i < this.playerNum; i++){
-                    if (this.snakes[i].mergeCount > 0){
-                        for (var j = 0; j < this.playerNum; j++){
-                            if (i != j){
-                                this.snakes[j].processShootReward(this.snakes[i].mergeCount, this.snakes[i].mergeCombo)
-                            }
-                        }
-                    }
-                }
-    
-                this.updateFightEffect()
-    
-                for (var k = 0; k < this.taichiFloor.buttonNum; k++){
-                    var isPressed = false
-                    var pressId = null
+                    this.render()
+                    
+                    this.renderer.setScissorTest(true)
                     for (var i = 0; i < this.playerNum; i++){
-                        for (var j = 0; j < this.snakes[i].spheres.length; j++){
-                            if (detectCircleCollision(this.snakes[i].spheres[j].position, this.taichiFloor.getButtonCenter(k), this.taichiFloor.buttonRaidus)){
-                                isPressed = true
-                                pressId = i
+                        // this.renderer.clearDepth()
+                        // this.renderer.setScissor(window.innerWidth * i / this.playerNum, 0, window.innerWidth / this.playerNum, window.innerHeight)
+                    }
+                }
+                if (this.camerasReadyCnt == this.cameras.length){
+                    this.ui.setPlayButtonActive(true)
+                }
+            }
+            else{
+        
+                if (this.gameActivate){
+                    this.gameTime += deltaTime
+        
+                    for (var i = 0; i < this.bullets.length; i++){
+                        const bullet = this.bullets[i]
+                        bullet.fly(deltaTime)
+                        for (var j = 0; j < this.playerNum; j++){
+                            bullet.detectSnakeCollision(this.snakes[j])
+                            if (bullet.toDestroy){
                                 break
                             }
                         }
-                        if (isPressed){
-                            break
+                        for (var j = i+1; j < this.bullets.length; j++){
+                            bullet.detectBulletCollision(this.bullets[j])
+                        }
+                        // bullet.detectWallCollision(0, -sceneSize/2)
+                        // bullet.detectWallCollision(0, sceneSize/2)
+                        // bullet.detectWallCollision(1, -sceneSize/2)
+                        // bullet.detectWallCollision(1, sceneSize/2)
+                    }
+                    const toDestroyBullets = this.bullets.filter(bullet => bullet.toDestroy)
+                    this.bullets = this.bullets.filter(bullet => !bullet.toDestroy)
+                    for (var i = 0; i < toDestroyBullets.length; i++){
+                        const bullet = toDestroyBullets[i]
+                        bullet.destroy()
+                    }
+                    
+                    // super bullets
+                    for (var i = 0; i < this.superBullets.length; i++){
+                        const bullet = this.superBullets[i]
+                        bullet.fly(deltaTime)
+                        for (var j = 0; j < this.playerNum; j++){
+                            bullet.detectSnakeCollision(this.snakes[j])
+                            if (bullet.toDestroy){
+                                break
+                            }
                         }
                     }
-                    this.taichiFloor.updatePress(k, isPressed, pressId)
-                }
-            
-                // this.textElement.innerHTML = ""
-                const dieStats = []
-                for (var i = 0; i < this.playerNum; i++){
-                    dieStats.push(this.detectSnakeDeath(i))
-                }
-                for (var i = 0; i < this.playerNum; i++){
-                    // this.textElement.innerHTML += `Player${i}: `
-                    // this.textElement.innerHTML = this.textElement.innerHTML + `Length ${this.snakes[i].spheres.length}<br>`
-                    if (dieStats[i]){
-                        this.gameOver = true
-                        this.gameActivate = false
-                        this.ui.showGameOver()
+                    const toDestroySuperBullets = this.superBullets.filter(bullet => bullet.toDestroy)
+                    this.superBullets = this.superBullets.filter(bullet => !bullet.toDestroy)
+                    for (var i = 0; i < toDestroySuperBullets.length; i++){
+                        const bullet = toDestroySuperBullets[i]
+                        bullet.destroy()
+                    }
+                
+                    for (var i = 0; i < this.playerNum; i++){
+                        this.snakes[i].update(deltaTime, this.keyPressed, this.snakes, this.bullets)
+                    }
+                    for (var i = 0; i < this.playerNum; i++){
+                        if (this.snakes[i].mergeCount > 0){
+                            for (var j = 0; j < this.playerNum; j++){
+                                if (i != j){
+                                    this.snakes[j].processShootReward(this.snakes[i].mergeCount, this.snakes[i].mergeCombo)
+                                }
+                            }
+                        }
+                    }
+        
+                    this.updateFightEffect()
+        
+                    for (var k = 0; k < this.taichiFloor.buttonNum; k++){
+                        var isPressed = false
+                        var pressId = null
+                        for (var i = 0; i < this.playerNum; i++){
+                            for (var j = 0; j < this.snakes[i].spheres.length; j++){
+                                if (detectCircleCollision(this.snakes[i].spheres[j].position, this.taichiFloor.getButtonCenter(k), this.taichiFloor.buttonRaidus)){
+                                    isPressed = true
+                                    pressId = i
+                                    break
+                                }
+                            }
+                            if (isPressed){
+                                break
+                            }
+                        }
+                        this.taichiFloor.updatePress(k, isPressed, pressId)
+                    }
+                
+                    // this.textElement.innerHTML = ""
+                    const dieStats = []
+                    for (var i = 0; i < this.playerNum; i++){
+                        dieStats.push(this.detectSnakeDeath(i))
+                    }
+                    for (var i = 0; i < this.playerNum; i++){
+                        // this.textElement.innerHTML += `Player${i}: `
+                        // this.textElement.innerHTML = this.textElement.innerHTML + `Length ${this.snakes[i].spheres.length}<br>`
+                        if (dieStats[i]){
+                            this.gameOver = true
+                            this.gameActivate = false
+                            this.ui.showGameOver()
+                        }
+                    }
+                    if (this.gameOver){
+                        this.updateEndState(dieStats)
                     }
                 }
-                if (this.gameOver){
-                    this.updateEndState(dieStats)
-                }
-            }
+            
+                this.render()
         
-            this.render()
-    
-            if (!this.gameOver && this.gameTime > 20.0 && this.bgmFile != "bgm_Fight.m4a"){
-                this.startFight()
+                if (!this.gameOver && this.gameTime > 20.0 && this.bgmFile != "bgm_Fight.m4a"){
+                    this.startFight()
+                }
+                this.updateBgm(deltaTime)
             }
-            this.updateBgm(deltaTime)
         }
 
     }
@@ -1424,8 +1472,8 @@ class Game{
         }
         else{
             for (var i = 0; i < this.playerNum; i++){
-                this.renderer.clearDepth()
-                this.renderer.setScissorTest(true)
+                // this.renderer.clearDepth()
+                // this.renderer.setScissorTest(true)
                 this.renderer.setScissor(window.innerWidth * i / this.playerNum, 0, window.innerWidth / this.playerNum, window.innerHeight)
                 this.renderer.setViewport(window.innerWidth * i / this.playerNum, 0, window.innerWidth / this.playerNum, window.innerHeight)
                 this.renderer.render(this.scene, this.cameras[i])
@@ -1469,7 +1517,7 @@ class Game{
         const fightLambda = minLength * this.playerNum / sumLength
         const greenFactor = (fightLambda * 255 + (1-fightLambda) * 96) / 255.0
         this.scene.background.r = this.scene.background.b = greenFactor
-        console.log(this.scene.background, fightLambda)
+        // console.log(this.scene.background, fightLambda)
     }
     
     createSuperBullet(position, shooterId){
@@ -1547,6 +1595,23 @@ class Game{
         }
         else if (color == 0x0000FF && opacity > 0.99){
             material = this.materialAssets["Marble_Blue"]
+            // const texture = this.textureAssets["hollow.png"]
+            // texture.minFilter = THREE.LinearFilter;
+            // texture.magFilter = THREE.LinearFilter;
+            // texture.format = THREE.RGBAFormat
+            // material = new THREE.MeshBasicMaterial({map: texture, transparent: true, side: THREE.DoubleSide})
+
+            // material = this.materialAssets["hollow.png"]
+            // console.log(material)
+            // material.transparent = true
+            // material.opacity = 0.1
+        }
+        else if (color == 0x9370DB){
+            const texture = this.textureAssets["hollow.png"]
+            texture.minFilter = THREE.LinearFilter;
+            texture.magFilter = THREE.LinearFilter;
+            texture.format = THREE.RGBAFormat
+            material = new THREE.MeshBasicMaterial({map: texture, transparent: true, side: THREE.DoubleSide})
         }
         else{
             material = new THREE.MeshBasicMaterial({
@@ -1559,7 +1624,7 @@ class Game{
     }
     
     createSphere(scene, radius, color, opacity, position=null, quaternion=null){
-        const sphere_geometry = new THREE.SphereGeometry(radius, 128, 64)
+        const sphere_geometry = new THREE.SphereGeometry(radius, 64, 64)
         const material = this.getSphereMaterial(color, opacity)
         const sphere = new THREE.Mesh(sphere_geometry, material)
         if (position != null){
