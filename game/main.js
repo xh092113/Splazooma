@@ -1074,13 +1074,13 @@ class Game{
             game.outTitleMesh.rotation.x = -Math.PI / 2
             game.outTitleMesh.position.y = 40
 
-            game.inTitleMesh = new THREE.Mesh(
-                new THREE.CircleGeometry(game.sceneSize / 4, 32),
-                new THREE.MeshBasicMaterial({map: texture})
-            )
-            game.scene.add(game.inTitleMesh)
-            game.inTitleMesh.rotation.x = Math.PI / 2
-            game.inTitleMesh.position.y = 20
+            // game.inTitleMesh = new THREE.Mesh(
+            //     new THREE.CircleGeometry(game.sceneSize / 4, 32),
+            //     new THREE.MeshBasicMaterial({map: texture})
+            // )
+            // game.scene.add(game.inTitleMesh)
+            // game.inTitleMesh.rotation.x = Math.PI / 2
+            // game.inTitleMesh.position.y = 20
             resolve()
         })
         const loadPromises = [backgroundPromise, titlePromise]
