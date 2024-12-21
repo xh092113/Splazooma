@@ -134,7 +134,7 @@ class TaichiFloor extends THREE.Mesh {
     this.game = game
     this.radius = radius
     this.rotation.x = -Math.PI / 2
-    this.position.y = 0.02
+    this.position.y = 0.2
 
     this.startRotate = false
     this.rotateMaxSpeed = 0.3
@@ -202,6 +202,7 @@ class TaichiFloor extends THREE.Mesh {
       this.buttonEffects[i].material.color.set(0x404000)
       this.buttonEffects[i].material.emissive.set(0x404000)
       this.buttonEffects[i].material.emissiveIntensity = 0.0
+      this.buttonEffects[i].position.z = -10.0
     }
     for (var i = 0; i < this.buttonNum; i++){
       for (var j = 0; j < this.maxSuperCount; j++){

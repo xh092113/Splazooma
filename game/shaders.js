@@ -18,7 +18,7 @@ export const vertexShader = /* glsl */ `
     if (uRotateSpeed > 0.0){
       vDistanceToCenter = vPosition.x * vPosition.x + vPosition.z * vPosition.z;
       if (vDistanceToCenter < (uCenterRadius + 15.0) * (uCenterRadius + 15.0)){
-        float lambda = 3.0 * uRotateSpeed * ((uCenterRadius + 15.0) * (uCenterRadius + 15.0) - vDistanceToCenter) / (30.0 * uCenterRadius + 225.0);
+        float lambda = 1.0 * uRotateSpeed * ((uCenterRadius + 15.0) * (uCenterRadius + 15.0) - vDistanceToCenter) / (30.0 * uCenterRadius + 225.0);
         vec2 centerOffset = normalize(vec2(vPosition.x, vPosition.z));
         waveVec += centerOffset * waveDistance * lambda;
         waveVec += vec2(centerOffset.y, -centerOffset.x) * waveDistance * lambda;
